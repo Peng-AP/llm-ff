@@ -221,8 +221,13 @@ def _season_tools(tool, team_id: str) -> None:
         week = season.current_week(conn)
         lineup = season.lineup_detail(conn, team_id, week)
         unlocked = [s for s in lineup["starters"].values() if s and not s["locked"]]
+        nfl_now = conn.execute("SELECT MIN(week) FROM nfl_games WHERE season = ? AND state != 'post'",
+                               (season.season_year(),)).fetchone()[0]
+        week_note = (f"Fantasy week {week} is NFL week {week}. NFL week {nfl_now} is being played now, but this "
+                     f"league starts scoring in week {load_league()['schedule']['start_week']}, so those games "
+                     f"don't count." if nfl_now and nfl_now < week else f"Fantasy week {week} is NFL week {week}.")
         return {
-            "now": clock.eastern(), "week": week, "your_team": team_id,
+            "now": clock.eastern(), "week": week, "week_note": week_note, "your_team": team_id,
             "deadlines": {
                 "next_waiver_processing": T.next_processing(),
                 "trade_deadline": f"before week {load_league()['trades']['deadline_week'] + 1} kicks off",
