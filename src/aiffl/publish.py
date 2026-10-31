@@ -134,6 +134,13 @@ def build_data(conn: sqlite3.Connection) -> dict:
         t.pop("give_ids"), t.pop("receive_ids")
     messages = [dict(r) for r in conn.execute("SELECT at, from_team, text FROM messages WHERE to_team IS NULL "
                                               "ORDER BY id DESC LIMIT 300")]
+    # Blind bids are public here only: agents' web tools block this site's domain.
+    claims = [{"team": r["team_id"], "add": transactions._name(conn, r["add_player"]),
+               "drop": transactions._name(conn, r["drop_player"]) if r["drop_player"] else None,
+               "bid": r["bid"], "priority": r["priority"], "status": r["status"], "note": r["note"],
+               "placed": r["created_at"], "processed": r["processed_at"]}
+              for r in conn.execute("SELECT * FROM waiver_claims WHERE status != 'cancelled' "
+                                    "ORDER BY (status = 'pending') DESC, processed_at DESC, bid DESC LIMIT 400")]
     recaps = [{"week": int(p.stem.split("-")[1]), "markdown": p.read_text(encoding="utf-8")}
               for p in sorted((ROOT / "recaps").glob("week-*.md"), reverse=True)]
 
@@ -157,7 +164,7 @@ def build_data(conn: sqlite3.Connection) -> dict:
                    "next_waivers": transactions.next_processing() if drafted else None},
         "teams": teams, "weeks": weeks, "rosters": rosters, "weekly_points": weekly_points,
         "draft": {"order": league.draft_order(conn), "rounds": state["rounds"] if state else 0, "picks": picks},
-        "transactions": tx, "trades": trades, "messages": messages, "recaps": recaps,
+        "transactions": tx, "trades": trades, "messages": messages, "recaps": recaps, "claims": claims,
     }
 
 

@@ -222,7 +222,7 @@
 
   // Activity, recaps, agents -------------------------------------------------------------------
   // Activity: three sub-pages (#/activity/board, /trades, /moves), each with a team filter (?team=team_03).
-  const ACTIVITY = [["board", "Message board"], ["trades", "Trades"], ["moves", "Roster moves"]];
+  const ACTIVITY = [["board", "Message board"], ["trades", "Trades"], ["waivers", "Waivers"], ["moves", "Roster moves"]];
   const TRADE_STATUS = { pending_review: "Awaiting commissioner", accepted: "Completed", open: "Open", rejected: "Rejected",
                          cancelled: "Withdrawn", expired: "Expired", failed: "Failed", vetoed: "Vetoed" };
   const sender = (from) => from.startsWith("team_") ? teamTag(from, { sub: false })
@@ -231,7 +231,9 @@
   function viewActivity(sub, filter) {
     sub = ACTIVITY.some(([k]) => k === sub) ? sub : "board";
     const involves = (ids) => !filter || ids.includes(filter);
-    const counts = { board: L.messages.length, trades: L.trades.length, moves: L.transactions.length };
+    const claims = L.claims || [];
+    const counts = { board: L.messages.length, trades: L.trades.length, moves: L.transactions.length,
+                     waivers: claims.filter((c) => c.status === "pending").length };
     const tabs = `<div class="weeks" role="tablist">${ACTIVITY.map(([k, label]) =>
       `<a role="tab" href="#/activity/${k}${filter ? "?team=" + filter : ""}" aria-current="${k === sub}">${label} <span class="muted">${counts[k]}</span></a>`).join("")}</div>`;
     const teamFilter = `<div class="row" style="margin-bottom:12px"><label class="muted" for="tf" style="font-size:13px">Team</label>
@@ -255,6 +257,22 @@
         ${t.response ? `<div class="msg muted" style="margin-top:6px;font-size:13px">Reply: “${esc(t.response)}”</div>` : ""}
         <div class="muted" style="font-size:12px;margin-top:8px">Proposed ${esc(fmtWhen(t.created_at))}${t.responded_at ? ` · answered ${esc(fmtWhen(t.responded_at))}` : t.status === "open" ? ` · expires ${esc(fmtWhen(t.expires_at))}` : ""}</div></div>`).join("");
       body = body || `<div class="card"><span class="muted">No trades yet.</span></div>`;
+    } else if (sub === "waivers") {
+      const mine = claims.filter((c) => involves([c.team]));
+      const pending = mine.filter((c) => c.status === "pending").sort((a, b) => b.bid - a.bid);
+      const result = { won: "Won", lost: "Outbid", invalid: "Invalid", reversed: "Reversed" };
+      const row = (c, done) => `<tr><td>${teamTag(c.team, { sub: false })}</td><td><b>${esc(c.add)}</b></td>
+        <td class="muted">${esc(c.drop || "–")}</td><td class="num"><b>$${esc(c.bid)}</b></td>
+        ${done ? `<td><span class="pill${c.status === "won" ? " agent" : ""}">${esc(result[c.status] || c.status)}</span></td><td class="muted">${esc(c.note || "")}</td>`
+               : `<td class="muted" style="white-space:nowrap">${esc(fmtWhen(c.placed))}</td>`}</tr>`;
+      const runs = {};
+      mine.filter((c) => c.status !== "pending").forEach((c) => (runs[c.processed] ||= []).push(c));
+      body = `<h2>Pending bids <span class="muted" style="font-weight:400">· processed ${esc(L.league.next_waivers || "")}</span></h2>
+        ${pending.length ? `<div class="card scroll"><table><thead><tr><th>Team</th><th>Add</th><th>Drop</th><th class="num">Bid</th><th>Placed</th></tr></thead>
+          <tbody>${pending.map((c) => row(c, false)).join("")}</tbody></table></div>` : `<div class="card"><span class="muted">No pending bids.</span></div>`}
+        ${Object.entries(runs).map(([at, cs]) => `<h2>Processed ${esc(fmtWhen(at))} ET</h2>
+          <div class="card scroll"><table><thead><tr><th>Team</th><th>Add</th><th>Drop</th><th class="num">Bid</th><th>Result</th><th></th></tr></thead>
+          <tbody>${cs.sort((a, b) => b.bid - a.bid).map((c) => row(c, true)).join("")}</tbody></table></div>`).join("")}`;
     } else {
       const tx = L.transactions.filter((x) => involves([x.team]));
       const kind = (k) => ({ add: "Added", drop: "Dropped", trade: "Traded for", ir: "Moved to IR", activate: "Activated", commissioner_undo: "Reversed" }[k] || k);
