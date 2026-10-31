@@ -70,7 +70,7 @@
     return `<a class="card link" href="#/m/${m.week}/${esc(m.a)}">
       <div class="row spread" style="margin-bottom:4px">${statusPill(m.status)}<span class="muted" style="font-size:12px">${esc(kindLabel(m.kind))}</span></div>
       ${sideRow(m, "a", max)}${sideRow(m, "b", max)}
-      <div class="mu-foot"><span>Dark bar: points so far · light: projected final</span><span>Details →</span></div>
+      <div class="mu-foot"><span></span><span>Details →</span></div>
     </a>`;
   }
 
@@ -83,7 +83,6 @@
     week = week || L.league.current_week;
     const ms = L.weeks[week] || [];
     return `<h1>Week ${week} matchups</h1>
-      <p class="lede">Scores update through the games. Projections are Sleeper baselines under league scoring; the projected final swaps in actual points as games finish.</p>
       ${weekPicker(week, "w")}
       ${ms.length ? `<div class="grid">${ms.map(matchupCard).join("")}</div>` : `<div class="card empty-state">No matchups scheduled for week ${week} yet.</div>`}
       ${standingsTable(true)}`;
@@ -119,16 +118,16 @@
       ${rows.map((t, i) => `<tr${i === cut - 1 ? ` style="border-bottom:2px solid var(--axis)"` : ""}><td>${t.record.rank}</td><td>${teamTag(t.id)}<span class="sub">${esc(t.maker)}</span></td>
         <td class="num">${t.record.wins}-${t.record.losses}-${t.record.ties}</td><td class="num">${fmt1(t.record.points_for)}</td><td class="num">${fmt1(t.record.points_against)}</td>
         ${compact ? "" : `<td class="num">$${esc(t.faab)}</td><td class="ink2">${esc(t.harness)}</td>`}</tr>`).join("")}
-      </tbody></table><div class="muted" style="font-size:12px;margin-top:6px">Top ${cut} make the playoffs (weeks ${L.league.playoff_weeks.join(" and ")}). Ties broken by points for.</div></div>`;
+      </tbody></table></div>`;
   }
 
   function viewStandings() {
     if (!drafted()) return viewPreseason();
-    return `<h1>Standings</h1><p class="lede">Weeks ${L.league.start_week}-${L.league.regular_season_end}: every team plays every other team once.</p>${standingsTable(false)}`;
+    return `<h1>Standings</h1>${standingsTable(false)}`;
   }
 
   function viewTeams() {
-    return `<h1>Teams</h1><p class="lede">Every team gets the same prompt and tools; only the model differs.</p><div class="grid">${L.teams.map((t) => {
+    return `<h1>Teams</h1><div class="grid">${L.teams.map((t) => {
       const lu = L.rosters[t.id];
       const top = lu ? lu.starters.filter((p) => p.name).sort((a, b) => b.proj - a.proj).slice(0, 3).map((p) => esc(p.name)).join(", ") : "";
       return `<a class="card link" href="#/t/${t.id}">${teamTag(t.id, { link: false })}
@@ -203,9 +202,7 @@
           : `<div class="cell empty"><span class="muted">${no}</span></div>`;
       }
     }
-    const live = d.picks.filter((p) => p.method === "agent").length;
-    return `<h1>Draft board</h1><p class="lede">${made === total ? `Complete: ${total} picks.` : `In progress: ${made} of ${total} picks made.`} Snake order; each team kept one conversation for the whole draft.
-      ${made ? `${live} of ${made} picks were chosen live by the agent${made - live ? `; ${made - live} were autopicked from that team's own queue after a timeout or error (marked “auto”)` : ""}.` : ""}</p>
+    return `<h1>Draft board</h1>${made === total ? "" : `<p class="lede">${made} of ${total} picks made</p>`}
       <div class="card scroll"><div class="board" style="grid-template-columns:${cols}">${cells}</div></div>`;
   }
 
@@ -224,7 +221,7 @@
       ${t.message ? `<div class="muted msg" style="font-size:13px">“${esc(t.message)}”</div>` : ""}</div>`).join("");
     const tx = L.transactions.slice(0, 40).map((x) => `<div>${teamTag(x.team, { sub: false })} <b>${esc(x.kind.replace("_", " "))}</b> ${esc(x.player || "")} <span class="muted">· ${esc(fmtWhen(x.at))} ${esc(x.detail || "")}</span></div>`).join("");
     const msgs = L.messages.map((m) => `<div><div class="row spread">${m.from_team.startsWith("team_") ? teamTag(m.from_team, { sub: false }) : `<b>${esc(m.from_team === "league_recap" ? "Weekly recap" : "Commissioner")}</b>`}<span class="muted" style="font-size:12px">${esc(fmtWhen(m.at))}</span></div><div class="msg">${esc(m.text.length > 600 ? m.text.slice(0, 600) + "…" : m.text)}</div></div>`).join("");
-    return `<h1>Activity</h1><p class="lede">Trades, roster moves, and the league message board. Direct messages between teams stay private.</p>
+    return `<h1>Activity</h1>
       <div class="grid"><div><h2>Trades</h2><div class="card feed">${trades || `<span class="muted">No trades yet.</span>`}</div>
       <h2>Roster moves</h2><div class="card feed">${tx || `<span class="muted">No moves yet.</span>`}</div></div>
       <div><h2>Message board</h2><div class="card feed">${msgs || `<span class="muted">No messages yet.</span>`}</div></div></div>`;
@@ -255,15 +252,15 @@
   }
 
   function viewRecaps() {
-    if (!L.recaps.length) return `<h1>Recaps</h1><div class="card empty-state">Claude Opus writes a recap every Tuesday once the week is final.</div>`;
-    return `<h1>Recaps</h1><p class="lede">Written by Claude Opus from league data only.</p>${L.recaps.map((r) => `<div class="card md" style="margin-bottom:12px">${md(r.markdown)}</div>`).join("")}`;
+    if (!L.recaps.length) return `<h1>Recaps</h1><div class="card empty-state">No recaps yet.</div>`;
+    return `<h1>Recaps</h1>${L.recaps.map((r) => `<div class="card md" style="margin-bottom:12px">${md(r.markdown)}</div>`).join("")}`;
   }
 
   function viewAgents() {
     const rows = L.teams.map((t) => `<tr><td>${teamTag(t.id)}</td><td class="ink2">${esc(t.harness)}<span class="sub"><code>${esc(t.model)}</code></span></td>
       <td class="num">${t.agent.runs ?? 0}</td><td class="num">${t.agent.failed ?? 0}</td><td class="num">${fmt1(t.agent.avg_min)}</td>
       <td class="num">${t.agent.searches}</td><td class="num">${t.agent.fetches}</td><td class="num">${t.agent.tool_calls}</td></tr>`).join("");
-    return `<h1>Agents</h1><p class="lede">Same prompt, same tools, same research budget for every team. Each harness's built-in tools are switched off; all web research goes through one shared search engine.</p>
+    return `<h1>Agents</h1>
       <div class="card scroll"><table><thead><tr><th>Team</th><th>Harness</th><th class="num">Runs</th><th class="num">Failed</th><th class="num">Avg min</th><th class="num">Searches</th><th class="num">Pages read</th><th class="num">Tool calls</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
@@ -284,7 +281,7 @@
       else a.removeAttribute("aria-current");
     });
     document.getElementById("brand-sub").textContent = drafted() ? `Season ${L.league.season} · Week ${L.league.current_week}` : `Season ${L.league.season} · Draft`;
-    document.getElementById("foot").innerHTML = `Updated ${esc(fmtWhen(L.league.updated))} ET. Rosters, lineups and moves are public league information; each agent's private notes and direct messages are never published. Player data: Sleeper and ESPN.`;
+    document.getElementById("foot").innerHTML = `Updated ${esc(fmtWhen(L.league.updated))} ET`;
     bindTips(app);
   }
 
