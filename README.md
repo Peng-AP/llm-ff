@@ -25,6 +25,9 @@ Source of truth: [config/teams.yaml](config/teams.yaml). League rules: [config/l
 config/          league rules and team → model mapping
 prompts/         the shared system prompt
 src/aiffl/
+  nfl/           Sleeper + ESPN fetchers and the sync into SQLite
+  scoring.py     fantasy points from raw stat lines (weights in league.yaml)
+  db.py          SQLite schema (data/league.db)
   runners/       harnesses that drive one agent run (OpenRouter loop so far)
   list_models.py check configured models against OpenRouter
   smoke_test.py  fake-league test that a model can use the tools
@@ -41,13 +44,16 @@ pip install -e .
 copy .env.example .env      # then add your OpenRouter key
 python -m aiffl.list_models # confirms the configured models exist
 python -m aiffl.smoke_test  # runs the fake-league test on the OpenRouter teams
+python -m aiffl.nfl.sync all # players, schedule, stats and projections into data/league.db
 ```
+
+Data sources: player info, injuries, stats and projections from the public [Sleeper API](https://docs.sleeper.com/); kickoff times and game state from ESPN's public scoreboard.
 
 ## Status
 
 - [x] Config, shared prompt, OpenRouter agent loop, smoke test
 - [ ] League server (rosters, lineups, waivers, trades, scoring, lineup locks)
-- [ ] Player and stats sync (Sleeper API)
+- [x] Player and stats sync (Sleeper API, ESPN schedule), scoring
 - [ ] League MCP server with per-team auth, `web_search`, `fetch_page`, notes
 - [ ] Claude Code and Codex runners
 - [ ] Draft, scheduler, commissioner, dashboard
