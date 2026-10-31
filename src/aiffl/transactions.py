@@ -187,7 +187,7 @@ def process_waivers(conn: sqlite3.Connection) -> list[str]:
                 conn.execute("INSERT INTO rosters (player_id, team_id, acquired_at, how) VALUES (?, ?, ?, 'waiver')",
                              (c["add_player"], c["team_id"], ts))
                 conn.execute("UPDATE league_teams SET faab = faab - ? WHERE team_id = ?", (c["bid"], c["team_id"]))
-                _log(conn, c["team_id"], "add", c["add_player"], f"waiver ${c['bid']}")
+                _log(conn, c["team_id"], "add", c["add_player"], f"waiver ${c['bid']} (claim {c['id']})")
             log.append(f"{c['team_id']} won {_name(conn, c['add_player'])} for ${c['bid']}")
         except LeagueError as e:
             status, note = ("lost" if "lost to" in str(e) or "already on" in str(e) else "invalid"), str(e)
@@ -211,7 +211,7 @@ def _trade_view(conn: sqlite3.Connection, t: sqlite3.Row) -> dict:
             "from_team_receives": [_name(conn, p) for p in json.loads(t["receive"])],
             "give_ids": json.loads(t["give"]), "receive_ids": json.loads(t["receive"]),
             "message": t["message"], "status": t["status"], "created_at": t["created_at"],
-            "expires_at": t["expires_at"], "response": t["response"]}
+            "expires_at": t["expires_at"], "responded_at": t["responded_at"], "response": t["response"]}
 
 
 def _validate_sides(conn, from_team, to_team, give, receive):
@@ -268,6 +268,19 @@ def respond_to_trade(conn: sqlite3.Connection, team_id: str, trade_id: int, acce
             conn.execute("UPDATE trades SET status = 'rejected', responded_at = ?, response = ? WHERE id = ?",
                          (clock.now_iso(), message[:MAX_MESSAGE_CHARS], trade_id))
         return {"ok": True, "rejected": trade_id}
+    _check_trade_executable(conn, t)
+    if load_league()["trades"].get("review") == "commissioner":
+        with conn:
+            conn.execute("UPDATE trades SET status = 'pending_review', responded_at = ?, response = ? WHERE id = ?",
+                         (clock.now_iso(), message[:MAX_MESSAGE_CHARS], trade_id))
+        hours = load_league()["trades"].get("auto_approve_hours", 24)
+        return {"ok": True, "status": "pending_review",
+                "note": f"Accepted. The commissioner reviews every trade before it executes (it goes through "
+                        f"automatically after {hours} hours without a decision). Until then, rosters are unchanged."}
+    return execute_trade(conn, trade_id)
+
+
+def _check_trade_executable(conn: sqlite3.Connection, t: sqlite3.Row) -> None:
     if not trade_window_open(conn):
         raise LeagueError("The trade deadline has passed.")
     give, receive = json.loads(t["give"]), json.loads(t["receive"])
@@ -278,10 +291,17 @@ def respond_to_trade(conn: sqlite3.Connection, team_id: str, trade_id: int, acce
     after_from = active_count(conn, t["from_team"]) - len(give) + len(receive)
     after_to = active_count(conn, t["to_team"]) - len(receive) + len(give)
     if after_to > limit:
-        raise LeagueError(f"Accepting would put you at {after_to} players (max {limit}). Drop "
+        raise LeagueError(f"Accepting would put {t['to_team']} at {after_to} players (max {limit}). Drop "
                           f"{after_to - limit} first, then accept.")
     if after_from > limit:
         raise LeagueError(f"{t['from_team']} would end up over the roster limit; they must drop a player first.")
+
+
+def execute_trade(conn: sqlite3.Connection, trade_id: int, note: str | None = None) -> dict:
+    """Move the players. Re-checks everything, since rosters may have changed since acceptance."""
+    t = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
+    _check_trade_executable(conn, t)
+    give, receive = json.loads(t["give"]), json.loads(t["receive"])
     ts = clock.now_iso()
     with conn:
         for pid in give:
@@ -294,11 +314,12 @@ def respond_to_trade(conn: sqlite3.Connection, team_id: str, trade_id: int, acce
             conn.execute("UPDATE rosters SET team_id = ?, acquired_at = ?, how = 'trade' WHERE player_id = ?",
                          (t["from_team"], ts, pid))
             _log(conn, t["from_team"], "trade", pid, f"from {t['to_team']} (trade {trade_id})")
-        conn.execute("UPDATE trades SET status = 'accepted', responded_at = ?, response = ? WHERE id = ?",
-                     (ts, message[:MAX_MESSAGE_CHARS], trade_id))
+        conn.execute("UPDATE trades SET status = 'accepted', responded_at = COALESCE(responded_at, ?), "
+                     "response = COALESCE(?, response) WHERE id = ?", (ts, note, trade_id))
         # Other open offers involving these players can no longer go through.
         moved = set(give + receive)
-        for other in conn.execute("SELECT * FROM trades WHERE status = 'open'").fetchall():
+        for other in conn.execute("SELECT * FROM trades WHERE status IN ('open', 'pending_review') AND id != ?",
+                                  (trade_id,)).fetchall():
             if moved & set(json.loads(other["give"]) + json.loads(other["receive"])):
                 conn.execute("UPDATE trades SET status = 'failed', response = ? WHERE id = ?",
                              (f"a player in it was traded in trade {trade_id}", other["id"]))
@@ -325,6 +346,116 @@ def trades_for(conn: sqlite3.Connection, team_id: str, limit: int = 15) -> list[
     rows = conn.execute("SELECT * FROM trades WHERE from_team = ? OR to_team = ? ORDER BY (status = 'open') DESC, "
                         "id DESC LIMIT ?", (team_id, team_id, limit)).fetchall()
     return [_trade_view(conn, t) for t in rows]
+
+
+# Commissioner (a person) ------------------------------------------------------------------
+
+COMMISSIONER = "commissioner"
+
+
+def pending_trades(conn: sqlite3.Connection) -> list[dict]:
+    return [_trade_view(conn, t) for t in
+            conn.execute("SELECT * FROM trades WHERE status = 'pending_review' ORDER BY id").fetchall()]
+
+
+def _tell(conn: sqlite3.Connection, teams: list[str], text: str) -> None:
+    with conn:
+        for tid in teams:
+            conn.execute("INSERT INTO messages (at, from_team, to_team, text) VALUES (?, ?, ?, ?)",
+                         (clock.now_iso(), COMMISSIONER, tid, text))
+
+
+def approve_trade(conn: sqlite3.Connection, trade_id: int, note: str = "approved by the commissioner") -> dict:
+    t = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
+    if not t or t["status"] != "pending_review":
+        raise LeagueError(f"Trade {trade_id} is not awaiting review.")
+    teams = [t["from_team"], t["to_team"]]
+    try:
+        result = execute_trade(conn, trade_id, note)
+    except LeagueError as e:
+        with conn:
+            conn.execute("UPDATE trades SET status = 'failed', response = ? WHERE id = ?",
+                         (f"could not execute at approval: {e}", trade_id))
+        _tell(conn, teams, f"Trade {trade_id} could not go through when approved: {e}")
+        raise
+    _tell(conn, teams, f"Trade {trade_id} was approved and has executed ({note}).")
+    return result
+
+
+def veto_trade(conn: sqlite3.Connection, trade_id: int, reason: str) -> dict:
+    t = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
+    if not t or t["status"] != "pending_review":
+        raise LeagueError(f"Trade {trade_id} is not awaiting review.")
+    with conn:
+        conn.execute("UPDATE trades SET status = 'vetoed', response = ? WHERE id = ?", (f"vetoed: {reason}", trade_id))
+    _tell(conn, [t["from_team"], t["to_team"]], f"The commissioner vetoed trade {trade_id}: {reason}")
+    return {"ok": True, "vetoed": trade_id}
+
+
+def auto_approve_trades(conn: sqlite3.Connection) -> list[str]:
+    hours = load_league()["trades"].get("auto_approve_hours", 24)
+    cutoff = (clock.now() - timedelta(hours=hours)).strftime(clock.ISO)
+    done = []
+    for t in conn.execute("SELECT id FROM trades WHERE status = 'pending_review' AND responded_at <= ?",
+                          (cutoff,)).fetchall():
+        try:
+            approve_trade(conn, t["id"], f"auto-approved after {hours}h without a commissioner decision")
+            done.append(f"trade {t['id']} auto-approved")
+        except LeagueError as e:
+            done.append(f"trade {t['id']} failed at auto-approval: {e}")
+    return done
+
+
+def undo_transaction(conn: sqlite3.Connection, tx_id: int, reason: str) -> dict:
+    """Reverse a waiver add (refunding the bid and restoring the player dropped for it, if still
+    free) or a plain drop (re-adding the player, if still free)."""
+    tx = conn.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+    if not tx:
+        raise LeagueError(f"No transaction {tx_id}.")
+    team, pid = tx["team_id"], tx["player_id"]
+    ts = clock.now_iso()
+    claim = None
+    if tx["kind"] == "add":
+        claim = conn.execute("SELECT * FROM waiver_claims WHERE team_id = ? AND add_player = ? AND status = 'won' "
+                             "AND processed_at <= ? ORDER BY id DESC LIMIT 1", (team, pid, tx["at"])).fetchone()
+    if claim:
+        claim_id = claim["id"]
+        o = owner(conn, pid)
+        if not o or o["team_id"] != team:
+            raise LeagueError(f"{_name(conn, pid)} is no longer on {team}.")
+        _check_movable(conn, pid, "removed")
+        with conn:
+            _clear_from_lineups(conn, team, pid)
+            conn.execute("DELETE FROM rosters WHERE player_id = ?", (pid,))
+            conn.execute("UPDATE league_teams SET faab = faab + ? WHERE team_id = ?", (claim["bid"], team))
+            conn.execute("UPDATE waiver_claims SET status = 'reversed', note = ? WHERE id = ?",
+                         (f"reversed by commissioner: {reason}", claim_id))
+            _log(conn, team, "commissioner_undo", pid, f"reversed add (tx {tx_id}), refunded ${claim['bid']}: {reason}")
+            restored = None
+            if claim["drop_player"] and not owner(conn, claim["drop_player"]):
+                conn.execute("INSERT INTO rosters (player_id, team_id, acquired_at, how) VALUES (?, ?, ?, 'restored')",
+                             (claim["drop_player"], team, ts))
+                restored = _name(conn, claim["drop_player"])
+        _tell(conn, [team], f"The commissioner reversed your waiver pickup of {_name(conn, pid)} and refunded "
+                            f"${claim['bid']}" + (f"; {restored} is back on your roster" if restored else "")
+                            + f". Reason: {reason}")
+        return {"ok": True, "reversed": _name(conn, pid), "refunded": claim["bid"], "restored": restored}
+    if tx["kind"] == "drop":
+        if owner(conn, pid):
+            raise LeagueError(f"{_name(conn, pid)} has since been picked up by {owner(conn, pid)['team_id']}.")
+        if active_count(conn, team) >= roster_size():
+            raise LeagueError(f"{team}'s roster is full, so {_name(conn, pid)} can't be restored.")
+        with conn:
+            conn.execute("INSERT INTO rosters (player_id, team_id, acquired_at, how) VALUES (?, ?, ?, 'restored')",
+                         (pid, team, ts))
+            _log(conn, team, "commissioner_undo", pid, f"reversed drop (tx {tx_id}): {reason}")
+        _tell(conn, [team], f"The commissioner reversed your drop of {_name(conn, pid)}; he is back on your "
+                            f"roster. Reason: {reason}")
+        return {"ok": True, "restored": _name(conn, pid)}
+    if tx["kind"] == "add":
+        raise LeagueError(f"Transaction {tx_id} has no matching won waiver claim; it may already be reversed.")
+    raise LeagueError(f"Transaction {tx_id} is a {tx['kind']!r}; only waiver adds and drops can be reversed "
+                      f"(veto trades before they execute instead).")
 
 
 # Messages and the transaction log --------------------------------------------------------

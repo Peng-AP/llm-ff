@@ -102,6 +102,10 @@ def tick() -> None:
     # 2. League housekeeping -------------------------------------------------------------
     if n := transactions.expire_trades(conn):
         log(f"expired {n} trade offer(s)")
+    for note in transactions.auto_approve_trades(conn):
+        log(note)
+    if pending := transactions.pending_trades(conn):
+        log(f"{len(pending)} trade(s) awaiting the commissioner: run python -m aiffl.commish")
     for spec in cfg["waivers"]["process"]:
         if key := due(conn, "waivers", spec):
             results = transactions.process_waivers(conn)

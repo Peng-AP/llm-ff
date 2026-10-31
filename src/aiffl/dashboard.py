@@ -43,6 +43,12 @@ def write(conn: sqlite3.Connection | None = None) -> None:
     models = {t.id: t.model for t in load_teams()}
     week = season.current_week(conn)
     parts = [f"<h1>AI Fantasy Football League</h1><div class='muted'>Week {week} · updated {e(clock.eastern())}</div>"]
+    pending = transactions.pending_trades(conn)
+    if pending:
+        items = "".join(f"<div class='msg'><b>#{t['trade_id']}</b> {t['from_team']} gives {e(', '.join(t['from_team_gives']))}"
+                        f" · {t['to_team']} gives {e(', '.join(t['from_team_receives']))}</div>" for t in pending)
+        parts.append(f"<h2>Awaiting the commissioner</h2><div class='card'>{items}<div class='muted'>"
+                     "Review with <code>python -m aiffl.commish</code></div></div>")
 
     rows = "".join(f"<tr><td>{s['rank']}</td><td>{s['team_id']}</td><td>{e(models.get(s['team_id']))}</td>"
                    f"<td class='num'>{s['wins']}-{s['losses']}-{s['ties']}</td><td class='num'>{s['points_for']:.1f}</td>"

@@ -315,13 +315,15 @@ def _season_tools(tool, team_id: str) -> None:
     @tool
     def propose_trade(conn, to_team: str, give_player_ids: list[str], receive_player_ids: list[str],
                       message: str = "") -> dict:
-        """Offer a trade. It executes as soon as the other team accepts, if both rosters are still
-        valid. Offers expire after 48 hours. Your message is shown to the other team."""
+        """Offer a trade. Offers expire after 48 hours; your message is shown to the other team.
+        If accepted, the league commissioner reviews the trade before it executes (it goes through
+        automatically if not reviewed within a day) and can veto it."""
         return T.propose_trade(conn, team_id, to_team, give_player_ids, receive_player_ids, message)
 
     @tool
     def respond_to_trade(conn, trade_id: int, accept: bool, message: str = "") -> dict:
-        """Accept or reject a trade offered to you. Accepting executes it immediately."""
+        """Accept or reject a trade offered to you. An accepted trade executes once the commissioner
+        approves it (or automatically after a day without a decision)."""
         return T.respond_to_trade(conn, team_id, trade_id, accept, message)
 
     @tool

@@ -33,7 +33,8 @@ waivers:
   process: ["Wed 03:00", "Sat 03:00", "Sun 09:00"]   # US Eastern
 
 trades:
-  review: none                # trades execute when accepted, after validation; the weekly recap reports them
+  review: commissioner        # an accepted trade waits for the (human) commissioner: python -m aiffl.commish
+  auto_approve_hours: 24      # ...and goes through on its own if the commissioner hasn't acted by then
   max_open_proposals: 3       # per team
   expires_hours: 48
   deadline_week: 13           # no trades once week 14's first game kicks off
