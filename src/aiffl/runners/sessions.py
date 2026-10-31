@@ -69,7 +69,9 @@ class Session:
 
 class OpenRouterSession(Session):
     harness = "openrouter"
-    MAX_TURNS_PER_SEND = 40
+    # High on purpose: some models make one tool call per turn, and the time limit is the real bound.
+    # (Claude Code and Codex have no turn cap at all.)
+    MAX_TURNS_PER_SEND = 200
     KEEP_FULL_TOOL_RESULTS_SENDS = 2  # older tool results get trimmed to keep context small
 
     def __init__(self, *args, **kwargs):
