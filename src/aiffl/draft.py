@@ -146,10 +146,26 @@ def run_prep(conn: sqlite3.Connection, sessions: dict[str, Session], prep_minute
     say(f"== Prep phase: {len(todo)} teams researching in parallel (up to {prep_minutes} min) ==")
     messages = {tid: prep_message(conn, tid, prep_minutes) for tid in todo}
 
+    def prep_check(tid, since):
+        # Runs in the worker thread, so it opens its own connection.
+        c = db.connect()
+        searches = c.execute("SELECT COUNT(*) FROM tool_calls WHERE team_id = ? AND tool = 'web_search' AND at >= ?",
+                             (tid, since)).fetchone()[0]
+        queued = len(league.queue(c, tid))
+        c.close()
+        problems = []
+        if searches == 0:
+            problems.append("you have not run any web_search, so nothing on your board has been verified "
+                            "against current news")
+        if queued < 40:
+            problems.append(f"your draft queue has {queued} players; set at least 40 with set_draft_queue")
+        return ("Before you finish prep: " + "; ".join(problems) + ".") if problems else None
+
     def prep(tid):
         s = sessions[tid]
         s.budgets = PREP_BUDGET
-        return tid, s.send(messages[tid], timeout_s=prep_minutes * 60)
+        since = league.now_utc()
+        return tid, s.send(messages[tid], timeout_s=prep_minutes * 60, check_done=lambda: prep_check(tid, since))
 
     with ThreadPoolExecutor(max_workers=len(todo)) as pool:
         for tid, r in pool.map(prep, todo):

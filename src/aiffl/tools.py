@@ -30,6 +30,7 @@ def build_server(team_id: str, budgets: dict[str, int] | None = None) -> MCPServ
     budget = {"web_search": int(os.environ.get("AIFFL_SEARCH_BUDGET", 25)),
               "fetch_page": int(os.environ.get("AIFFL_FETCH_BUDGET", 15))}
     budget.update(budgets or {})
+    turn = {"searches": 0, "pick_nudged": False}  # this server lives for one agent turn
     season = int(load_league()["season"])
     # WARNING keeps the MCP library from switching on per-request HTTP logging in the draft console.
     server = MCPServer(name="league", instructions=f"Fantasy league tools for team {team_id}.", log_level="WARNING")
@@ -132,6 +133,13 @@ def build_server(team_id: str, budgets: dict[str, int] | None = None) -> MCPServ
     @tool
     def draft_player(conn, player_id: str) -> dict:
         """Draft a player. Only works while you are on the clock. The pick is final."""
+        if turn["searches"] == 0 and not turn["pick_nudged"]:
+            # Soft verification nudge, identical for every team: once per turn, a pick made without
+            # any web research this turn is held back. Calling again drafts the player.
+            turn["pick_nudged"] = True
+            return {"error": "Not drafted yet: you have not run any web_search this turn. Verify the player's "
+                             "current injury status, role, and news with a dated source first. If you are "
+                             "confident without checking, call draft_player again with the same player_id."}
         return {"ok": True, "pick": league.make_pick(conn, team_id, player_id)}
 
     @tool
@@ -186,6 +194,7 @@ def build_server(team_id: str, budgets: dict[str, int] | None = None) -> MCPServ
         injuries, and depth charts, which go stale fast.
         """
         spend("web_search")
+        turn["searches"] += 1
         return {"results": web.search(query, num_results, published_after), "searches_left": budget["web_search"]}
 
     @tool
