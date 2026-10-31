@@ -18,6 +18,10 @@ from openai import OpenAI
 from aiffl.config import LOGS_DIR
 
 ToolHandler = Callable[[str, dict], object]
+
+# Applied to every OpenRouter team alike. Only route to hosts that support tool calling, and
+# among those prefer the fastest: same model and weights, just less waiting.
+PROVIDER_ROUTING = {"require_parameters": True, "sort": "throughput"}
 # Called when the model tries to finish. Returns a reminder to send back (the run continues),
 # or None to let it finish. Each run gets at most one reminder.
 FinishCheck = Callable[[], str | None]
@@ -74,11 +78,7 @@ def run_agent(
             model=model,
             messages=messages,
             tools=tools,
-            extra_body={
-                # Only route to providers that actually support tool calling.
-                "provider": {"require_parameters": True},
-                "usage": {"include": True},
-            },
+            extra_body={"provider": PROVIDER_ROUTING, "usage": {"include": True}},
         )
         result.turns += 1
         _add_usage(result, resp.usage)

@@ -27,13 +27,22 @@ prompts/         the shared system prompt
 src/aiffl/
   nfl/           Sleeper + ESPN fetchers and the sync into SQLite
   scoring.py     fantasy points from raw stat lines (weights in league.yaml)
+  players.py     per-player season and rest-of-season numbers, search
+  league.py      league state and rules: snake draft, rosters, autopick
+  tools.py       the league MCP tools every agent gets (draft, players, notes, Exa web search)
+  mcp_server.py  stdio entry point for those tools (used by Claude Code and Codex)
+  runners/       harnesses: sessions.py keeps one conversation across many turns for
+                 Claude Code (claude -p --resume), Codex (codex exec resume), and OpenRouter
+  draft.py       live draft orchestrator
+  dryrun.py      rehearsal draft in data/dryrun/ with cheap models
   db.py          SQLite schema (data/league.db)
-  runners/       harnesses that drive one agent run (OpenRouter loop so far)
-  list_models.py check configured models against OpenRouter
-  smoke_test.py  fake-league test that a model can use the tools
 agents/team_NN/  each team's private notes (contents are gitignored)
-logs/            run transcripts (gitignored)
+logs/            transcripts and the live draft board (gitignored)
 ```
+
+## Fairness
+
+Every team gets the same system prompt and the same league MCP tools. Each harness's own built-in tools are switched off (Claude Code: `--tools ""`; Codex: shell, browser and other features disabled), so web research goes through the shared Exa-backed `web_search` / `fetch_page` with the same per-turn budget for everyone. Every tool call is logged in the `tool_calls` table.
 
 ## Setup (Windows)
 
@@ -49,11 +58,23 @@ python -m aiffl.nfl.sync all # players, schedule, stats and projections into dat
 
 Data sources: player info, injuries, stats and projections from the public [Sleeper API](https://docs.sleeper.com/); kickoff times and game state from ESPN's public scoreboard.
 
+## The draft
+
+```powershell
+python -m aiffl.dryrun                # rehearsal: 4 cheap teams, 2 rounds, isolated sandbox
+python -m aiffl.draft init            # reset the real league and randomize the draft order
+python -m aiffl.draft run             # prep (parallel research), every pick, then wrap-up
+python -m aiffl.draft board           # current board, from another terminal
+```
+
+Each team keeps one conversation for the whole draft. On the clock it gets 10 minutes; if it times out, the first available player in its own `set_draft_queue` list is drafted for it. `run` is resumable after a crash. The live board is also written to `logs/draft_board.txt`.
+
 ## Status
 
 - [x] Config, shared prompt, OpenRouter agent loop, smoke test
-- [ ] League server (rosters, lineups, waivers, trades, scoring, lineup locks)
 - [x] Player and stats sync (Sleeper API, ESPN schedule), scoring
-- [ ] League MCP server with per-team auth, `web_search`, `fetch_page`, notes
-- [ ] Claude Code and Codex runners
-- [ ] Draft, scheduler, commissioner, dashboard
+- [x] League MCP server: players, draft, notes, `web_search`, `fetch_page`
+- [x] Claude Code, Codex and OpenRouter session runners
+- [x] Live snake draft
+- [ ] Season: lineups with per-game locks, FAAB waivers, trades, matchups
+- [ ] Scheduler, commissioner, dashboard

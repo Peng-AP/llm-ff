@@ -1,0 +1,18 @@
+# Dry-run league: one team per harness plus a second OpenRouter model, cheap models only.
+# Used by: python -m aiffl.dryrun
+teams:
+  - id: team_01
+    model: claude-sonnet-5-5
+    harness: claude_code
+
+  - id: team_02
+    model: gpt-6.1-sol
+    harness: codex
+
+  - id: team_03
+    model: qwen/qwen3.8-flash
+    harness: openrouter
+
+  - id: team_04
+    model: deepseek/deepseek-v4-pro-0813
+    harness: openrouter

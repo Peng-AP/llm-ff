@@ -1,10 +1,11 @@
 """Pull NFL data into SQLite.
 
 Usage:
-    python -m aiffl.nfl.sync all                # players + full schedule + stats/projections around now
+    python -m aiffl.nfl.sync all                # players + schedule + all stats/projections + summary
     python -m aiffl.nfl.sync players
     python -m aiffl.nfl.sync schedule           # all 18 weeks: kickoffs, game state, scores
     python -m aiffl.nfl.sync stats 9 10         # stats + projections for specific weeks
+    python -m aiffl.nfl.sync summary            # rebuild per-player season / rest-of-season numbers
 """
 
 import json
@@ -13,6 +14,7 @@ from datetime import datetime, timezone
 
 from aiffl import db
 from aiffl.nfl import sources
+from aiffl.players import LAST_REGULAR_WEEK, build_summary
 
 REGULAR_SEASON_WEEKS = range(1, 19)
 
@@ -118,12 +120,14 @@ def main(argv: list[str]) -> None:
         if cmd == "stats":
             weeks = [int(a) for a in args] or [current_week]
         elif cmd == "all":
-            # Everything played so far (for history the agents can query) plus next week's projections.
-            weeks = list(range(1, min(current_week + 1, 18) + 1))
+            # Stats for every week played so far; projections for the rest of the fantasy season.
+            weeks = list(range(1, LAST_REGULAR_WEEK + 1))
         else:
             weeks = []
         for week in weeks:
             sync_week_stats(conn, season, week)
+        if cmd in ("all", "stats", "summary"):
+            _log(conn, "summary", f"{build_summary(conn, season, now_utc())} players")
     print(f"done. season {season}, current week {current_week}")
 
 
