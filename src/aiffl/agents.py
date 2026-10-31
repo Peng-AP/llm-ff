@@ -122,6 +122,14 @@ def pending_items(conn, team_id: str) -> list[str]:
         "SELECT * FROM trades WHERE to_team = ? AND status = 'open' AND created_at > ?", (team_id, since))]
     for m in conn.execute("SELECT * FROM messages WHERE to_team = ? AND at > ?", (team_id, since)):
         items.append(f"direct message from {m['from_team']} at {m['at']}")
+    results = conn.execute("SELECT c.status, c.bid, c.note, p.full_name FROM waiver_claims c JOIN nfl_players p "
+                           "ON p.player_id = c.add_player WHERE c.team_id = ? AND c.processed_at > ? "
+                           "AND c.status IN ('won', 'lost', 'invalid')", (team_id, since)).fetchall()
+    if results:
+        outcome = {"won": "won", "lost": "outbid on", "invalid": "invalid bid for"}
+        items.append("waiver results: " + ", ".join(
+            f"{outcome[r['status']]} {r['full_name']} (${r['bid']}{'; ' + r['note'] if r['note'] else ''})"
+            for r in results))
     mention = re.compile(rf"\b{re.escape(team_id)}\b")
     for m in conn.execute("SELECT * FROM messages WHERE to_team IS NULL AND from_team != ? AND at > ?",
                           (team_id, since)):

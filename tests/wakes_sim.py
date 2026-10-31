@@ -48,4 +48,23 @@ assert "team_02" not in wakes, "cooldown"
 assert "team_06" not in wakes, "in progress"
 assert "team_07" not in wakes, "daily cap"
 assert agents.pending_items(conn, "team_07"), "team_07 must still have an item, so only the cap blocks it"
+
+# Waiver results wake the bidders, and only them.
+fa = conn.execute("SELECT p.player_id FROM nfl_players p LEFT JOIN rosters r USING (player_id) "
+                  "WHERE r.team_id IS NULL AND p.team IS NOT NULL AND p.position = 'WR' LIMIT 1").fetchone()[0]
+drop4 = conn.execute("SELECT player_id FROM rosters WHERE team_id = 'team_04' AND on_ir = 0 LIMIT 1").fetchone()[0]
+drop5 = conn.execute("SELECT player_id FROM rosters WHERE team_id = 'team_05' AND on_ir = 0 LIMIT 1").fetchone()[0]
+conn.execute("UPDATE waiver_claims SET status = 'cancelled' WHERE status = 'pending'")
+conn.commit()
+T.submit_claim(conn, "team_04", fa, drop4, 9)
+T.submit_claim(conn, "team_05", fa, drop5, 3)
+os.environ["AIFFL_NOW"] = "2026-11-01T14:00:00Z"
+print("waivers:", T.process_waivers(conn))
+items4, items5 = agents.pending_items(conn, "team_04"), agents.pending_items(conn, "team_05")
+print("team_04:", items4)
+print("team_05:", items5)
+assert any(i.startswith("waiver results: won") for i in items4)
+assert any("outbid on" in i for i in items5)
+assert not any(i.startswith("waiver results") for i in agents.pending_items(conn, "team_08"))
+assert {"team_04", "team_05"} <= set(agents.due_wakes(conn))
 print("WAKE CHECKS PASSED")

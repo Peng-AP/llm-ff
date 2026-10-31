@@ -67,7 +67,8 @@ automation:
     - {at: "Mon 18:30", why: "Final check before Monday Night Football"}
   agent_run_minutes: 20
   # A team is also woken (on any tick) when something is addressed to it that it hasn't seen yet:
-  # a trade offer, a direct message, or a message-board post naming it (e.g. "team_04").
+  # a trade offer, a direct message, a message-board post naming it (e.g. "team_04"), or the
+  # results of its waiver bids.
   event_wakes:
     enabled: true
     minutes: 12               # length of a wake run
