@@ -158,10 +158,32 @@ def tick() -> None:
         for note in season.ensure_lineups(conn, season.current_week(conn)):
             log(f"lineup safety net: {note}")
 
-    # 6. Dashboard -----------------------------------------------------------------------
-    from aiffl import dashboard
-    dashboard.write(conn)
+    # 6. Public site ---------------------------------------------------------------------
+    publish_site(conn, cfg)
     conn.close()
+
+
+def publish_site(conn, cfg: dict) -> None:
+    from aiffl import publish
+    digest = publish.build(conn)
+    site = cfg.get("site", {})
+    if not site.get("deploy"):
+        return
+    last = conn.execute("SELECT done_at, detail FROM jobs_done WHERE key = 'site:last-deploy'").fetchone()
+    if last and last["detail"] == digest:
+        return  # nothing changed
+    week = season.current_week(conn)
+    live = conn.execute("SELECT 1 FROM nfl_games WHERE season = ? AND week = ? AND state = 'in' LIMIT 1",
+                        (int(cfg["season"]), week)).fetchone()
+    gap = site["min_minutes_between_deploys_live" if live else "min_minutes_between_deploys"]
+    if last and clock.now() - clock.parse(last["done_at"]) < timedelta(minutes=gap):
+        return
+    try:
+        publish.deploy()
+        mark(conn, "site:last-deploy", digest)
+        log("site deployed")
+    except Exception as e:  # a failed deploy must never break the league
+        log(f"site deploy failed: {e}")
 
 
 def status() -> None:
