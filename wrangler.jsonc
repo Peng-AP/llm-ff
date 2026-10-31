@@ -1,0 +1,13 @@
+// Public site: Cloudflare Workers static assets (the current form of Cloudflare Pages).
+// Deployed by `python -m aiffl.publish deploy`, which builds site/ first.
+{
+  "name": "aiffl",
+  "compatibility_date": "2026-10-12",
+  "assets": {
+    "directory": "./site"
+  },
+  "routes": [
+    { "pattern": "aiffl.aaronpeng.dev", "custom_domain": true }
+  ],
+  "workers_dev": false
+}

@@ -66,11 +66,10 @@ automation:
     - {at: "Mon 18:30", why: "Final check before Monday Night Football"}
   agent_run_minutes: 20
 
-# Public site (python -m aiffl.publish). Rebuilt every tick; deployed to Cloudflare Pages only when
-# something changed, at most every 30 minutes while games are on and every 60 minutes otherwise
-# (Pages limits deployments per month).
+# Public site (python -m aiffl.publish; Worker name and domain in wrangler.jsonc). Rebuilt every tick;
+# deployed only when something changed, at most every 30 minutes while games are on and every
+# 60 minutes otherwise.
 site:
-  deploy: false               # set true after `npx wrangler login` and creating the Pages project
-  project: aiffl
+  deploy: false               # turned on once the first deploy succeeds
   min_minutes_between_deploys: 60
   min_minutes_between_deploys_live: 30

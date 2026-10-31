@@ -22,7 +22,6 @@ from aiffl.config import ROOT, load_league, load_teams
 
 WEB = ROOT / "web"
 SITE = ROOT / "site"
-PAGES_PROJECT = "aiffl"
 WRANGLER = "wrangler@4.151.1"
 SITE_DOMAIN = "aaronpeng.dev"  # excluded from agents' web search and fetch
 
@@ -165,10 +164,9 @@ def build(conn: sqlite3.Connection | None = None) -> str:
 
 
 def deploy() -> None:
+    """Upload site/ as Workers static assets; wrangler.jsonc names the Worker and the custom domain."""
     npx = shutil.which("npx") or "npx"
-    project = load_league().get("site", {}).get("project", PAGES_PROJECT)
-    cmd = [npx, "--yes", WRANGLER, "pages", "deploy", str(SITE), "--project-name", project,
-           "--branch", "main", "--commit-dirty=true"]
+    cmd = [npx, "--yes", WRANGLER, "deploy", "--config", str(ROOT / "wrangler.jsonc")]
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=600, shell=(sys.platform == "win32"))
     if proc.returncode != 0:
@@ -181,7 +179,7 @@ def main() -> None:
     print(f"built {SITE / 'index.html'}")
     if cmd == "deploy":
         deploy()
-        print(f"deployed to Cloudflare Pages project '{PAGES_PROJECT}'")
+        print("deployed (see wrangler.jsonc for the Worker name and domain)")
 
 
 if __name__ == "__main__":
