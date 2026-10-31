@@ -2,6 +2,8 @@
 (() => {
   "use strict";
   let L = window.LEAGUE;
+  // The build stamps this script's URL with ?v=<hash>; a different hash in fresh data means a newer site.
+  const ASSETS = document.currentScript ? new URL(document.currentScript.src).searchParams.get("v") : null;
   const app = document.getElementById("app");
   const tip = document.getElementById("tip");
 
@@ -88,15 +90,20 @@
       ${standingsTable(true)}`;
   }
 
-  function lineupTable(lu, title) {
-    const rows = lu.starters.map((p) => `<tr><td class="slot">${esc(p.slot)}</td>
+  function playerRow(p, slot) {
+    return `<tr><td class="slot">${esc(slot)}</td>
       <td>${p.name ? `${posTag(p.pos)} <b>${esc(p.name)}</b>${p.inj ? `<span class="inj">${esc(p.inj)}</span>` : ""} <span class="muted">${esc(p.nfl || "")}</span>${gameNote(p)}` : `<span class="muted">Empty</span>`}</td>
-      <td class="num">${fmt1(p.proj)}</td><td class="num"><b>${p.state === "pre" || p.state === "bye" ? "–" : fmt1(p.pts)}</b></td></tr>`).join("");
-    const bench = lu.bench.map((p) => `${esc(p.name)} <span class="muted">${esc(p.pos)} ${fmt1(p.proj)}</span>`).join(" · ");
+      <td class="num">${fmt1(p.proj)}</td><td class="num"><b>${p.state === "pre" || p.state === "bye" ? "–" : fmt1(p.pts)}</b></td></tr>`;
+  }
+
+  function lineupTable(lu, title, { benchOpen = true } = {}) {
+    const head = `<thead><tr><th>Slot</th><th>Player</th><th class="num">Proj</th><th class="num">Pts</th></tr></thead>`;
+    const reserves = [...lu.bench.map((p) => playerRow(p, "BN")), ...lu.ir.map((p) => playerRow(p, "IR"))].join("");
     return `<div class="card"><div class="row spread"><b>${title}</b>${lu.set_by_agent ? `<span class="pill agent">Set by agent</span>` : `<span class="pill">Auto lineup</span>`}</div>
-      <div class="scroll"><table><thead><tr><th>Slot</th><th>Player</th><th class="num">Proj</th><th class="num">Pts</th></tr></thead><tbody>${rows}</tbody>
+      <div class="scroll"><table>${head}<tbody>${lu.starters.map((p) => playerRow(p, p.slot)).join("")}</tbody>
       <tfoot><tr><td></td><td class="ink2">Total · projected final ${fmt1(lu.live)}</td><td class="num">${fmt1(lu.proj)}</td><td class="num"><b>${fmt1(lu.pts)}</b></td></tr></tfoot></table></div>
-      <div class="muted" style="font-size:12px;margin-top:6px">Bench: ${bench || "–"}${lu.ir.length ? ` · IR: ${lu.ir.map((p) => esc(p.name)).join(", ")}` : ""}</div></div>`;
+      ${reserves ? `<details class="bench"${benchOpen ? " open" : ""}><summary>Bench (${lu.bench.length}${lu.ir.length ? ` + ${lu.ir.length} IR` : ""})</summary>
+        <div class="scroll"><table>${head}<tbody>${reserves}</tbody></table></div></details>` : ""}</div>`;
   }
 
   function viewMatchup(week, a) {
@@ -106,7 +113,7 @@
     return `<p><a href="#/w/${week}" class="muted">← Week ${week}</a></p>
       <div class="row spread"><h1>Week ${week}${m.kind !== "regular" ? " · " + esc(kindLabel(m.kind)) : ""}</h1>${statusPill(m.status)}</div>
       <div class="card row spread" style="margin:12px 0">${head(m.a, 0)}<span class="muted">vs</span>${head(m.b, 1)}</div>
-      ${m.a_lineup ? `<div class="lineups">${lineupTable(m.a_lineup, esc(team(m.a).name))}${lineupTable(m.b_lineup, esc(team(m.b).name))}</div>` : `<div class="card empty-state">Lineups appear the week before the game.</div>`}`;
+      ${m.a_lineup ? `<div class="lineups">${lineupTable(m.a_lineup, esc(team(m.a).name), { benchOpen: false })}${lineupTable(m.b_lineup, esc(team(m.b).name), { benchOpen: false })}</div>` : `<div class="card empty-state">Lineups appear the week before the game.</div>`}`;
   }
 
   // Standings & teams -------------------------------------------------------------------------
@@ -299,7 +306,10 @@
   setInterval(() => {
     const s = document.createElement("script");
     s.src = "data.js?t=" + Date.now();
-    s.onload = () => { L = window.LEAGUE; render(); s.remove(); };
+    s.onload = () => {
+      if (ASSETS && window.LEAGUE.league.assets && window.LEAGUE.league.assets !== ASSETS) return location.reload();
+      L = window.LEAGUE; render(); s.remove();
+    };
     document.body.appendChild(s);
   }, 120000);
 

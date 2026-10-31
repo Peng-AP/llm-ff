@@ -157,6 +157,15 @@ def build(conn: sqlite3.Connection | None = None) -> str:
     if SITE.exists():
         shutil.rmtree(SITE)
     shutil.copytree(WEB, SITE)
+    # Version the app's own files so browsers never run a stale copy, and so an open tab can tell
+    # (via data.js) that a newer version was deployed and reload itself.
+    assets = hashlib.sha256(b"".join((WEB / f).read_bytes() for f in ("app.js", "style.css", "index.html"))
+                            ).hexdigest()[:12]
+    index = (SITE / "index.html").read_text(encoding="utf-8")
+    index = index.replace('src="app.js"', f'src="app.js?v={assets}"').replace('href="style.css"',
+                                                                              f'href="style.css?v={assets}"')
+    (SITE / "index.html").write_text(index, encoding="utf-8")
+    data["league"]["assets"] = assets
     payload = json.dumps(data, default=str, separators=(",", ":"))
     (SITE / "data.js").write_text(f"window.LEAGUE = {payload};\n", encoding="utf-8")
     stable = json.dumps({k: v for k, v in data.items() if k != "league"}, default=str, sort_keys=True)
