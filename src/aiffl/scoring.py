@@ -21,6 +21,8 @@ OFFENSE_STATS = {
 # Return and recovery touchdowns by offensive players.
 OTHER_TD_STATS = ["st_td", "fum_rec_td"]
 
+KICKER = {"fg_0_39": 3, "fg_40_49": 4, "fg_50_plus": 5, "xp": 1, "missed_fg": -1, "missed_xp": -1}
+DST = {"sack": 1, "int": 2, "fum_rec": 2, "safety": 2, "blocked_kick": 2, "td": 6}  # td: defensive or return
 DST_POINTS_ALLOWED = [(0, 10), (6, 7), (13, 4), (20, 1), (27, 0), (34, -1)]  # (max allowed, points)
 DST_POINTS_ALLOWED_ELSE = -4
 
@@ -41,14 +43,15 @@ def kicker_points(stats: dict) -> float:
     fg_short = _s(stats, "fgm") - fg_50 - fg_40
     missed_fg = _s(stats, "fga") - _s(stats, "fgm")
     missed_xp = _s(stats, "xpa") - _s(stats, "xpm")
-    return 3 * fg_short + 4 * fg_40 + 5 * fg_50 + _s(stats, "xpm") - missed_fg - missed_xp
+    return (KICKER["fg_0_39"] * fg_short + KICKER["fg_40_49"] * fg_40 + KICKER["fg_50_plus"] * fg_50
+            + KICKER["xp"] * _s(stats, "xpm") + KICKER["missed_fg"] * missed_fg + KICKER["missed_xp"] * missed_xp)
 
 
 def dst_points(stats: dict) -> float:
-    pts = (_s(stats, "sack") + 2 * _s(stats, "int") + 2 * _s(stats, "fum_rec")
-           + 2 * _s(stats, "safe") + 2 * _s(stats, "blk_kick")
+    pts = (DST["sack"] * _s(stats, "sack") + DST["int"] * _s(stats, "int") + DST["fum_rec"] * _s(stats, "fum_rec")
+           + DST["safety"] * _s(stats, "safe") + DST["blocked_kick"] * _s(stats, "blk_kick")
            # Not "td": on team lines that counts every touchdown the team scored, offense included.
-           + 6 * (_s(stats, "def_td") + _s(stats, "def_st_td")))
+           + DST["td"] * (_s(stats, "def_td") + _s(stats, "def_st_td")))
     allowed = _s(stats, "pts_allow")
     pts += next((p for limit, p in DST_POINTS_ALLOWED if allowed <= limit), DST_POINTS_ALLOWED_ELSE)
     return pts

@@ -74,10 +74,9 @@ automation:
     cooldown_minutes: 60      # since the team's last run started
     max_per_day: 6            # per team, US Eastern day
 
-# Public site (python -m aiffl.publish; Worker name and domain in wrangler.jsonc). Rebuilt every tick;
-# deployed only when something changed, at most every 30 minutes while games are on and every
-# 60 minutes otherwise.
+# Public site (python -m aiffl.publish; Worker name and domain in wrangler.jsonc). Rebuilt every tick
+# and deployed whenever something changed (only the changed data file is uploaded).
 site:
   deploy: true
-  min_minutes_between_deploys: 60
-  min_minutes_between_deploys_live: 30
+  min_minutes_between_deploys: 10
+  min_minutes_between_deploys_live: 10

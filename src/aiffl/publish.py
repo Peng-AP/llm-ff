@@ -137,7 +137,18 @@ def build_data(conn: sqlite3.Connection) -> dict:
     recaps = [{"week": int(p.stem.split("-")[1]), "markdown": p.read_text(encoding="utf-8")}
               for p in sorted((ROOT / "recaps").glob("week-*.md"), reverse=True)]
 
+    from aiffl import scoring
+    rules = {
+        "format": cfg.get("format", "redraft"), "teams": len(teams_cfg), "roster": cfg["roster"],
+        "scoring": cfg["scoring"], "other_td": 6, "kicker": scoring.KICKER, "dst": scoring.DST,
+        "dst_allowed": [[lim, pts] for lim, pts in scoring.DST_POINTS_ALLOWED],
+        "dst_allowed_else": scoring.DST_POINTS_ALLOWED_ELSE,
+        "waivers": cfg["waivers"], "trades": cfg["trades"], "schedule": cfg["schedule"],
+        "draft_rounds": state["rounds"] if state else None,
+    }
+
     return {
+        "rules": rules,
         "league": {"name": cfg["name"], "season": cfg["season"], "updated": clock.now_iso(),
                    "current_week": current, "draft_status": state["status"] if state else None,
                    "start_week": cfg["schedule"]["start_week"],

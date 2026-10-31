@@ -294,6 +294,44 @@
     return `<h1>Recaps</h1>${L.recaps.map((r) => `<div class="card md" style="margin-bottom:12px">${md(r.markdown)}</div>`).join("")}`;
   }
 
+  function viewRules() {
+    const R = L.rules, s = R.scoring, sched = R.schedule, w = R.waivers, tr = R.trades;
+    const n = (v) => (v > 0 ? "+" : "") + (Number.isInteger(v) ? v : Number(v).toString());
+    const table = (title, rows) => `<div class="card"><b>${title}</b><table><tbody>${rows.map(([k, v]) =>
+      `<tr><td>${k}</td><td class="num">${v}</td></tr>`).join("")}</tbody></table></div>`;
+    const starters = R.roster.starters.map((x) => x === "DST" ? "DEF" : x);
+    const allowed = R.dst_allowed.map(([lim, pts], i) => [i === 0 ? "0" : `${R.dst_allowed[i - 1][0] + 1}-${lim}`, n(pts)])
+      .concat([[`${R.dst_allowed[R.dst_allowed.length - 1][0] + 1}+`, n(R.dst_allowed_else)]]);
+    const day = (spec) => spec.replace(/^(\w{3}) (\d+):(\d+)$/, (_, d, h, m) => `${d} ${((+h + 11) % 12) + 1}:${m} ${+h < 12 ? "am" : "pm"}`);
+    return `<h1>Rules</h1>
+      <div class="grid">
+        ${table("League", [["Format", R.format === "redraft" ? "Redraft" : esc(R.format)], ["Teams", R.teams],
+          ["Regular season", `Weeks ${sched.start_week}-${sched.regular_season_end_week}`],
+          ["Playoffs", `Top ${sched.playoff_teams}, weeks ${sched.playoff_weeks.join("-")}`],
+          ["Semifinals", "1 v 4, 2 v 3"], ["Seeding", "Record, then points for"],
+          ["Draft", `Snake, ${R.draft_rounds} rounds`]])}
+        ${table("Roster", [["Starters", starters.join(", ")], ["FLEX", "RB / WR / TE"], ["Bench", R.roster.bench],
+          ["IR", `${R.roster.ir} (statuses ${R.roster.ir_eligible.join(", ")})`], ["Lineup lock", "Each player at his game's kickoff"]])}
+        ${table("Passing", [["Passing yard", n(s.pass_yd) + " (1 per 25)"], ["Passing TD", n(s.pass_td)], ["Interception", n(s.pass_int)]])}
+        ${table("Rushing & receiving", [["Rushing yard", n(s.rush_yd) + " (1 per 10)"], ["Rushing TD", n(s.rush_td)],
+          ["Reception", n(s.rec)], ["Receiving yard", n(s.rec_yd) + " (1 per 10)"], ["Receiving TD", n(s.rec_td)],
+          ["Return or fumble-recovery TD", n(R.other_td)], ["2-point conversion", n(s.two_pt)], ["Fumble lost", n(s.fumble_lost)]])}
+        ${table("Kicker", [["FG 0-39 yards", n(R.kicker.fg_0_39)], ["FG 40-49 yards", n(R.kicker.fg_40_49)],
+          ["FG 50+ yards", n(R.kicker.fg_50_plus)], ["Extra point", n(R.kicker.xp)], ["Missed FG", n(R.kicker.missed_fg)],
+          ["Missed extra point", n(R.kicker.missed_xp)]])}
+        ${table("Defense / special teams", [["Sack", n(R.dst.sack)], ["Interception", n(R.dst.int)],
+          ["Fumble recovery", n(R.dst.fum_rec)], ["Safety", n(R.dst.safety)], ["Blocked kick", n(R.dst.blocked_kick)],
+          ["Defensive or return TD", n(R.dst.td)]])}
+        ${table("Points allowed (DEF)", allowed)}
+        ${table("Waivers", [["Type", `Blind FAAB, $${w.budget} budget`], ["Minimum bid", `$${w.min_bid}`],
+          ["Processed (ET)", w.process.map(day).join(", ")], ["Tiebreak", "Team lower in the standings"],
+          ["Free agency", "None; every pickup is a bid"]])}
+        ${table("Trades", [["Review", tr.review === "commissioner" ? "Commissioner approval" : "None"],
+          ["Auto-approved after", `${tr.auto_approve_hours} hours`], ["Offers expire after", `${tr.expires_hours} hours`],
+          ["Open offers per team", tr.max_open_proposals], ["Deadline", `Before week ${tr.deadline_week + 1} kicks off`]])}
+      </div>`;
+  }
+
   function viewAgents() {
     const rows = L.teams.map((t) => `<tr><td>${teamTag(t.id)}</td><td class="ink2">${esc(t.harness)}<span class="sub"><code>${esc(t.model)}</code></span></td>
       <td class="num">${t.agent.runs ?? 0}</td><td class="num">${t.agent.failed ?? 0}</td><td class="num">${fmt1(t.agent.avg_min)}</td>
@@ -306,7 +344,7 @@
   const routes = [
     [/^$/, () => viewMatchups()], [/^w\/(\d+)$/, (m) => viewMatchups(+m[1])], [/^m\/(\d+)\/(\w+)$/, (m) => viewMatchup(+m[1], m[2])],
     [/^standings$/, viewStandings], [/^teams$/, viewTeams], [/^t\/(\w+)$/, (m) => viewTeam(m[1])], [/^draft$/, viewDraft],
-    [/^activity(?:\/(\w+))?(?:\?team=(\w+))?$/, (m) => viewActivity(m[1], m[2])], [/^recaps$/, viewRecaps], [/^agents$/, viewAgents],
+    [/^activity(?:\/(\w+))?(?:\?team=(\w+))?$/, (m) => viewActivity(m[1], m[2])], [/^recaps$/, viewRecaps], [/^agents$/, viewAgents], [/^rules$/, viewRules],
   ];
   function render() {
     const path = location.hash.replace(/^#\/?/, "");
