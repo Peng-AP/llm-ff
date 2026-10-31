@@ -157,6 +157,16 @@ def tick() -> None:
             log(f"   {r['team']} [{r['model']}]: {'ok' if r['ok'] else r['error']}, {r['minutes']} min, ${r['cost_usd']}")
         for note in season.ensure_lineups(conn, season.current_week(conn)):
             log(f"lineup safety net: {note}")
+    elif not os.environ.get("AIFFL_NO_AGENTS"):
+        # No scheduled run this tick: wake any team with a trade offer or message waiting for it.
+        from aiffl import agents
+        if wakes := agents.due_wakes(conn):
+            for tid, items in wakes.items():
+                log(f"waking {tid}: {'; '.join(items)}")
+            for r in agents.run_wakes(wakes):
+                log(f"   {r['team']} [{r['model']}]: {'ok' if r['ok'] else r['error']}, {r['minutes']} min")
+            for note in season.ensure_lineups(conn, season.current_week(conn)):
+                log(f"lineup safety net: {note}")
 
     # 6. Public site ---------------------------------------------------------------------
     publish_site(conn, cfg)

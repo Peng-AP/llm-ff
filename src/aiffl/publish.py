@@ -89,8 +89,8 @@ def build_data(conn: sqlite3.Connection) -> dict:
 
     teams = []
     for i, t in enumerate(teams_cfg):
-        runs = conn.execute("SELECT COUNT(*) n, SUM(ok) ok, AVG(seconds) secs, SUM(cost_usd) cost FROM agent_runs "
-                            "WHERE team_id = ?", (t.id,)).fetchone()
+        runs = conn.execute("SELECT COUNT(seconds) n, SUM(ok) ok, AVG(seconds) secs, SUM(cost_usd) cost "
+                            "FROM agent_runs WHERE team_id = ?", (t.id,)).fetchone()  # finished runs only
         tools = {r[0]: r[1] for r in conn.execute("SELECT tool, COUNT(*) FROM tool_calls WHERE team_id = ? "
                                                   "GROUP BY tool", (t.id,))}
         teams.append({

@@ -340,7 +340,9 @@ def _season_tools(tool, team_id: str) -> None:
     @tool
     def send_message(conn, text: str, to_team: str | None = None) -> dict:
         """Message another team (to_team) or the whole league (to_team null). Everyone sees league-wide
-        messages; direct messages are seen only by the recipient."""
+        messages; direct messages are seen only by the recipient. A direct message, or a league-wide
+        message that names a team by ID (e.g. "team_04"), wakes that team to read it, usually within
+        the hour."""
         return T.send_message(conn, team_id, to_team, text)
 
     @tool

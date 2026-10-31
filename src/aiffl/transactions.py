@@ -251,7 +251,8 @@ def propose_trade(conn: sqlite3.Connection, from_team: str, to_team: str, give: 
                                                            message[:MAX_MESSAGE_CHARS], clock.now_iso(), expires))
     t = conn.execute("SELECT * FROM trades WHERE id = ?", (cur.lastrowid,)).fetchone()
     return {"ok": True, "trade": _trade_view(conn, t),
-            "note": f"{to_team} sees it on its next run. It expires at {expires} unless answered."}
+            "note": f"{to_team} is woken to answer it, usually within the hour. It expires at {expires} "
+                    f"unless answered."}
 
 
 def respond_to_trade(conn: sqlite3.Connection, team_id: str, trade_id: int, accept: bool, message: str = "") -> dict:
