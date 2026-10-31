@@ -128,6 +128,92 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     PRIMARY KEY (team_id, phase)
 );
 
+-- Season --------------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS matchups (
+    week    INTEGER NOT NULL,
+    team_a  TEXT NOT NULL REFERENCES league_teams (team_id),
+    team_b  TEXT NOT NULL REFERENCES league_teams (team_id),
+    kind    TEXT NOT NULL,                     -- regular, semifinal, final, third_place
+    score_a REAL NOT NULL DEFAULT 0,
+    score_b REAL NOT NULL DEFAULT 0,
+    status  TEXT NOT NULL DEFAULT 'scheduled', -- scheduled, live, final
+    PRIMARY KEY (week, team_a)
+);
+
+CREATE TABLE IF NOT EXISTS lineups (
+    week      INTEGER NOT NULL,
+    team_id   TEXT NOT NULL REFERENCES league_teams (team_id),
+    slot      TEXT NOT NULL,                   -- QB, RB1, RB2, WR1, WR2, TE, FLEX, K, DEF
+    player_id TEXT REFERENCES nfl_players (player_id),
+    set_by    TEXT NOT NULL,                   -- agent, auto
+    set_at    TEXT NOT NULL,
+    PRIMARY KEY (week, team_id, slot)
+);
+
+CREATE TABLE IF NOT EXISTS waiver_claims (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id      TEXT NOT NULL REFERENCES league_teams (team_id),
+    add_player   TEXT NOT NULL REFERENCES nfl_players (player_id),
+    drop_player  TEXT REFERENCES nfl_players (player_id),
+    bid          INTEGER NOT NULL,
+    priority     INTEGER NOT NULL,             -- the team's own order among equal bids, 1 = first
+    status       TEXT NOT NULL DEFAULT 'pending',  -- pending, won, lost, invalid, cancelled
+    note         TEXT,
+    created_at   TEXT NOT NULL,
+    processed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS transactions (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    at        TEXT NOT NULL,
+    team_id   TEXT NOT NULL,
+    kind      TEXT NOT NULL,                   -- add, drop, trade, ir, activate
+    player_id TEXT,
+    detail    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS trades (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_team    TEXT NOT NULL REFERENCES league_teams (team_id),
+    to_team      TEXT NOT NULL REFERENCES league_teams (team_id),
+    give         TEXT NOT NULL,                -- JSON list of player_ids from_team sends
+    receive      TEXT NOT NULL,                -- JSON list of player_ids from_team gets
+    message      TEXT,
+    status       TEXT NOT NULL DEFAULT 'open', -- open, accepted, rejected, cancelled, expired, failed
+    created_at   TEXT NOT NULL,
+    expires_at   TEXT NOT NULL,
+    responded_at TEXT,
+    response     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    at        TEXT NOT NULL,
+    from_team TEXT NOT NULL,
+    to_team   TEXT,                            -- NULL = the whole league
+    text      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id    TEXT NOT NULL,
+    why        TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    seconds    REAL,
+    ok         INTEGER,
+    error      TEXT,
+    cost_usd   REAL,
+    turns      INTEGER
+);
+
+-- Scheduler jobs already done, so a tick never repeats one.
+CREATE TABLE IF NOT EXISTS jobs_done (
+    key     TEXT PRIMARY KEY,                  -- e.g. waivers:2026-11-11T08:00:00Z
+    done_at TEXT NOT NULL,
+    detail  TEXT
+);
+
 -- Every tool call any agent makes, for auditing and analysis.
 CREATE TABLE IF NOT EXISTS tool_calls (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,6 +243,8 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 # Columns added after a table was first created: (table, column, definition).
 ADDED_COLUMNS = [
     ("agent_sessions", "prepped", "INTEGER NOT NULL DEFAULT 0"),
+    ("league_teams", "faab", "INTEGER"),               # remaining budget; NULL until the season starts
+    ("rosters", "on_ir", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

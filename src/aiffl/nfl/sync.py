@@ -72,22 +72,23 @@ def sync_players(conn) -> None:
     _log(conn, "players", f"{len(rows)} fantasy-position players")
 
 
+def sync_week_games(conn, season: int, week: int) -> int:
+    games = sources.week_games(season, week)
+    conn.executemany(
+        """INSERT INTO nfl_games VALUES
+               (:game_id, :season, :week, :kickoff_utc, :home, :away, :state,
+                :home_score, :away_score, :updated_at)
+           ON CONFLICT (game_id) DO UPDATE SET
+               kickoff_utc=excluded.kickoff_utc, state=excluded.state,
+               home_score=excluded.home_score, away_score=excluded.away_score,
+               updated_at=excluded.updated_at""",
+        [{**g, "updated_at": now_utc()} for g in games],
+    )
+    return len(games)
+
+
 def sync_schedule(conn, season: int) -> None:
-    ts = now_utc()
-    total = 0
-    for week in REGULAR_SEASON_WEEKS:
-        games = sources.week_games(season, week)
-        conn.executemany(
-            """INSERT INTO nfl_games VALUES
-                   (:game_id, :season, :week, :kickoff_utc, :home, :away, :state,
-                    :home_score, :away_score, :updated_at)
-               ON CONFLICT (game_id) DO UPDATE SET
-                   kickoff_utc=excluded.kickoff_utc, state=excluded.state,
-                   home_score=excluded.home_score, away_score=excluded.away_score,
-                   updated_at=excluded.updated_at""",
-            [{**g, "updated_at": ts} for g in games],
-        )
-        total += len(games)
+    total = sum(sync_week_games(conn, season, week) for week in REGULAR_SEASON_WEEKS)
     _log(conn, "schedule", f"{total} games, season {season}")
 
 

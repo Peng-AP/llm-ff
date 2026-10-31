@@ -3,8 +3,8 @@
 import random
 import sqlite3
 from collections import Counter
-from datetime import datetime, timezone
 
+from aiffl import clock
 from aiffl.config import Team, load_league
 
 
@@ -13,7 +13,7 @@ class LeagueError(Exception):
 
 
 def now_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return clock.now_iso()
 
 
 # Roster requirements -----------------------------------------------------------------------
@@ -54,11 +54,12 @@ def init_league(conn: sqlite3.Connection, teams: list[Team], rounds: int | None 
     order = [t.id for t in teams]
     random.Random(seed).shuffle(order)
     with conn:
-        for table in ("tool_calls", "agent_sessions", "rosters", "draft_queue", "draft_picks", "draft_state",
-                      "league_teams"):
+        for table in ("jobs_done", "agent_runs", "messages", "trades", "transactions", "waiver_claims", "lineups",
+                      "matchups", "tool_calls", "agent_sessions", "rosters", "draft_queue", "draft_picks",
+                      "draft_state", "league_teams"):
             conn.execute(f"DELETE FROM {table}")
         by_id = {t.id: t for t in teams}
-        conn.executemany("INSERT INTO league_teams VALUES (?, ?, ?, ?)",
+        conn.executemany("INSERT INTO league_teams (team_id, model, harness, draft_slot) VALUES (?, ?, ?, ?)",
                          [(tid, by_id[tid].model, by_id[tid].harness, i + 1) for i, tid in enumerate(order)])
         pick_no = 0
         for rnd in range(1, rounds + 1):
@@ -176,7 +177,8 @@ def make_pick(conn: sqlite3.Connection, team_id: str, player_id: str, method: st
         ts = now_utc()
         conn.execute("UPDATE draft_picks SET player_id = ?, made_at = ?, method = ? WHERE pick_no = ?",
                      (player_id, ts, method, pick["pick_no"]))
-        conn.execute("INSERT INTO rosters VALUES (?, ?, ?, 'draft')", (player_id, team_id, ts))
+        conn.execute("INSERT INTO rosters (player_id, team_id, acquired_at, how) VALUES (?, ?, ?, 'draft')",
+                     (player_id, team_id, ts))
         conn.execute("COMMIT")
     except Exception:
         conn.execute("ROLLBACK")

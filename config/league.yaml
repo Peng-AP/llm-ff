@@ -7,6 +7,8 @@ roster:
   starters: [QB, RB, RB, WR, WR, TE, FLEX, K, DST]   # FLEX = RB/WR/TE
   bench: 6
   ir: 1
+  # A player can go on IR only with one of these Sleeper injury statuses.
+  ir_eligible: [IR, Out, PUP, Sus, NA, COV, DNR]
 
 scoring:
   # Full PPR. Change before the draft, not after.
@@ -23,15 +25,18 @@ scoring:
   # Kicker and DST tables are defined in the scoring module.
 
 waivers:
+  # Every pickup is a blind FAAB bid; there is no first-come free agency, so the order agents
+  # happen to run in never matters. Highest bid wins; ties go to the team lower in the standings.
   type: faab
   budget: 100
-  process: "Wed 03:00 America/New_York"
   min_bid: 0
+  process: ["Wed 03:00", "Sat 03:00", "Sun 09:00"]   # US Eastern
 
 trades:
-  review: commissioner        # commissioner agent can veto collusive or invalid trades
+  review: none                # trades execute when accepted, after validation; the weekly recap reports them
   max_open_proposals: 3       # per team
-  deadline_week: 13
+  expires_hours: 48
+  deadline_week: 13           # no trades once week 14's first game kicks off
 
 lineups:
   lock: per_game              # each player locks at his game's kickoff
@@ -40,4 +45,22 @@ schedule:
   start_week: 9               # first scored week; Week 9 kicks off Thu Nov 5, 2026
   regular_season_end_week: 15 # weeks 9-15 = 7 weeks: with 8 teams, everyone plays everyone once
   playoff_teams: 4
-  playoff_weeks: [16, 17]
+  playoff_weeks: [16, 17]     # 16: 1 v 4, 2 v 3. 17: final and third-place game. Seeding: record, then points for.
+
+# What the scheduler (python -m aiffl.scheduler tick, every 15 minutes) does and when. US Eastern.
+automation:
+  sync_players: "09:00"       # daily injury/status refresh from Sleeper (they ask for at most once a day)
+  sync_players_sunday: "07:30"
+  finalize_week: "Tue 09:00"  # re-sync final stats, settle matchups, standings
+  recap: "Tue 09:30"
+  agent_runs:
+    - {at: "Tue 10:30", why: "Weekly review: last week's results are final; waiver bids for Wednesday 3am are due"}
+    - {at: "Wed 10:00", why: "Daily check: waivers processed overnight"}
+    - {at: "Thu 10:00", why: "Daily check before Thursday Night Football"}
+    - {at: "Thu 18:45", why: "Final check before Thursday Night Football (inactives are out about 90 minutes before kickoff)"}
+    - {at: "Fri 10:00", why: "Daily check: Friday injury reports carry game designations"}
+    - {at: "Sat 10:00", why: "Daily check: waivers processed overnight; last bids before the Sunday 9am run"}
+    - {at: "Sun 08:00", why: "Sunday morning: inactives for early international games; last chance for Sunday 9am waivers"}
+    - {at: "Sun 11:45", why: "Final check before 1pm kickoffs (inactives are out)"}
+    - {at: "Mon 18:30", why: "Final check before Monday Night Football"}
+  agent_run_minutes: 20

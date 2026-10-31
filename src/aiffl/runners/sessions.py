@@ -39,14 +39,15 @@ class SendResult:
 class Session:
     harness = ""
 
-    def __init__(self, team: Team, system_prompt: str, phase: str, session_id: str | None = None):
+    def __init__(self, team: Team, system_prompt: str, phase: str, session_id: str | None = None,
+                 log_name: str | None = None):
         self.team, self.system_prompt, self.phase = team, system_prompt, phase
         self.session_id = session_id
         self.budgets: dict[str, int] = {}  # per-turn web budgets, e.g. {"web_search": 10, "fetch_page": 5}
         self.workspace = team.workspace
         self.workspace.mkdir(parents=True, exist_ok=True)
-        self.log_path = LOGS_DIR / f"{phase}_{team.id}.jsonl"
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        self.log_path = LOGS_DIR / (log_name or f"{phase}_{team.id}.jsonl")
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def send(self, text: str, timeout_s: float, check_done: DoneCheck | None = None) -> SendResult:
         raise NotImplementedError
@@ -113,12 +114,19 @@ class OpenRouterSession(Session):
         self.send_starts.append(len(self.messages))
         self.messages.append({"role": "user", "content": text})
         self._log("user", text)
-        start, result, reminded = time.monotonic(), SendResult(ok=False), False
+        start, result, reminded, warned = time.monotonic(), SendResult(ok=False), False, False
 
         while result.turns < self.MAX_TURNS_PER_SEND:
-            if time.monotonic() - start > timeout_s:
+            elapsed = time.monotonic() - start
+            if elapsed > timeout_s:
                 result.error = "timeout"
                 break
+            if not warned and timeout_s >= 300 and elapsed > 0.8 * timeout_s:
+                warned = True
+                note = (f"About {int((timeout_s - elapsed) / 60) + 1} minutes are left in this turn. Wrap up: "
+                        "make your final moves, then save your notes.")
+                self.messages.append({"role": "user", "content": note})
+                self._log("user", note)
             try:
                 resp = await asyncio.to_thread(
                     self.client.chat.completions.create, model=self.team.model, messages=self.messages,
@@ -324,5 +332,6 @@ class CodexSession(Session):
 HARNESSES = {"openrouter": OpenRouterSession, "claude_code": ClaudeCodeSession, "codex": CodexSession}
 
 
-def make_session(team: Team, system_prompt: str, phase: str, session_id: str | None = None) -> Session:
-    return HARNESSES[team.harness](team, system_prompt, phase, session_id)
+def make_session(team: Team, system_prompt: str, phase: str, session_id: str | None = None,
+                 log_name: str | None = None) -> Session:
+    return HARNESSES[team.harness](team, system_prompt, phase, session_id, log_name)

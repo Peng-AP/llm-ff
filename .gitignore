@@ -11,6 +11,8 @@ __pycache__/
 # Runtime state
 data/
 logs/
+# Generated dashboard. (recaps/ is committed so the season's story lives in the repo.)
+site/
 
 # Agent workspaces hold each team's private notes. Keep the folders, not the contents.
 agents/*/*
