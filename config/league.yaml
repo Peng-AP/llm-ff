@@ -69,7 +69,7 @@ automation:
   # A team is also woken (on any tick) when something is addressed to it that it hasn't seen yet:
   # a trade offer, a direct message, or a message-board post naming it (e.g. "team_04").
   event_wakes:
-    enabled: false            # switched on once no pre-wake-code run is in progress
+    enabled: true
     minutes: 12               # length of a wake run
     cooldown_minutes: 60      # since the team's last run started
     max_per_day: 6            # per team, US Eastern day
