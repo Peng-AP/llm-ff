@@ -128,12 +128,12 @@ def build_data(conn: sqlite3.Connection) -> dict:
     tx = [{"id": r["id"], "at": r["at"], "team": r["team_id"], "kind": r["kind"],
            "player": (conn.execute("SELECT full_name || ' (' || position || ', ' || COALESCE(team, 'FA') || ')' "
                                    "FROM nfl_players WHERE player_id = ?", (r["player_id"],)).fetchone() or [None])[0],
-           "detail": r["detail"]} for r in conn.execute("SELECT * FROM transactions ORDER BY id DESC LIMIT 80")]
-    trades = [transactions._trade_view(conn, t) for t in conn.execute("SELECT * FROM trades ORDER BY id DESC LIMIT 40")]
+           "detail": r["detail"]} for r in conn.execute("SELECT * FROM transactions ORDER BY id DESC LIMIT 500")]
+    trades = [transactions._trade_view(conn, t) for t in conn.execute("SELECT * FROM trades ORDER BY id DESC LIMIT 200")]
     for t in trades:
         t.pop("give_ids"), t.pop("receive_ids")
     messages = [dict(r) for r in conn.execute("SELECT at, from_team, text FROM messages WHERE to_team IS NULL "
-                                              "ORDER BY id DESC LIMIT 40")]
+                                              "ORDER BY id DESC LIMIT 300")]
     recaps = [{"week": int(p.stem.split("-")[1]), "markdown": p.read_text(encoding="utf-8")}
               for p in sorted((ROOT / "recaps").glob("week-*.md"), reverse=True)]
 

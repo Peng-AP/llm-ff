@@ -221,17 +221,48 @@
   }
 
   // Activity, recaps, agents -------------------------------------------------------------------
-  function viewActivity() {
-    const statusName = { pending_review: "awaiting commissioner", accepted: "completed" };
-    const trades = L.trades.map((t) => `<div><div class="row spread"><span>${teamTag(t.from_team, { sub: false })} → ${teamTag(t.to_team, { sub: false })}</span><span class="pill">${esc(statusName[t.status] || t.status)}</span></div>
-      <div class="ink2" style="margin-top:4px">${esc(team(t.from_team).name)} gives ${esc(t.from_team_gives.join(", "))}; gets ${esc(t.from_team_receives.join(", "))}</div>
-      ${t.message ? `<div class="muted msg" style="font-size:13px">“${esc(t.message)}”</div>` : ""}</div>`).join("");
-    const tx = L.transactions.slice(0, 40).map((x) => `<div>${teamTag(x.team, { sub: false })} <b>${esc(x.kind.replace("_", " "))}</b> ${esc(x.player || "")} <span class="muted">· ${esc(fmtWhen(x.at))} ${esc(x.detail || "")}</span></div>`).join("");
-    const msgs = L.messages.map((m) => `<div><div class="row spread">${m.from_team.startsWith("team_") ? teamTag(m.from_team, { sub: false }) : `<b>${esc(m.from_team === "league_recap" ? "Weekly recap" : "Commissioner")}</b>`}<span class="muted" style="font-size:12px">${esc(fmtWhen(m.at))}</span></div><div class="msg">${esc(m.text.length > 600 ? m.text.slice(0, 600) + "…" : m.text)}</div></div>`).join("");
-    return `<h1>Activity</h1>
-      <div class="grid"><div><h2>Trades</h2><div class="card feed">${trades || `<span class="muted">No trades yet.</span>`}</div>
-      <h2>Roster moves</h2><div class="card feed">${tx || `<span class="muted">No moves yet.</span>`}</div></div>
-      <div><h2>Message board</h2><div class="card feed">${msgs || `<span class="muted">No messages yet.</span>`}</div></div></div>`;
+  // Activity: three sub-pages (#/activity/board, /trades, /moves), each with a team filter (?team=team_03).
+  const ACTIVITY = [["board", "Message board"], ["trades", "Trades"], ["moves", "Roster moves"]];
+  const TRADE_STATUS = { pending_review: "Awaiting commissioner", accepted: "Completed", open: "Open", rejected: "Rejected",
+                         cancelled: "Withdrawn", expired: "Expired", failed: "Failed", vetoed: "Vetoed" };
+  const sender = (from) => from.startsWith("team_") ? teamTag(from, { sub: false })
+    : `<b>${esc(from === "league_recap" ? "Weekly recap" : "Commissioner")}</b>`;
+
+  function viewActivity(sub, filter) {
+    sub = ACTIVITY.some(([k]) => k === sub) ? sub : "board";
+    const involves = (ids) => !filter || ids.includes(filter);
+    const counts = { board: L.messages.length, trades: L.trades.length, moves: L.transactions.length };
+    const tabs = `<div class="weeks" role="tablist">${ACTIVITY.map(([k, label]) =>
+      `<a role="tab" href="#/activity/${k}${filter ? "?team=" + filter : ""}" aria-current="${k === sub}">${label} <span class="muted">${counts[k]}</span></a>`).join("")}</div>`;
+    const teamFilter = `<div class="row" style="margin-bottom:12px"><label class="muted" for="tf" style="font-size:13px">Team</label>
+      <select id="tf" class="select"><option value="">All teams</option>${L.teams.map((t) => `<option value="${t.id}"${t.id === filter ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></div>`;
+
+    let body;
+    if (sub === "board") {
+      const msgs = L.messages.filter((m) => involves([m.from_team]));
+      body = msgs.map((m) => `<div><div class="row spread">${sender(m.from_team)}<span class="muted" style="font-size:12px">${esc(fmtWhen(m.at))}</span></div>
+        <div class="msg${m.from_team === "league_recap" ? " md" : ""}" style="margin-top:4px">${m.from_team === "league_recap" ? md(m.text) : esc(m.text)}</div></div>`).join("");
+      body = `<div class="card feed">${body || `<span class="muted">No messages yet.</span>`}</div>`;
+    } else if (sub === "trades") {
+      const trades = L.trades.filter((t) => involves([t.from_team, t.to_team]));
+      body = trades.map((t) => `<div class="card" style="margin-bottom:12px">
+        <div class="row spread"><span class="row">${teamTag(t.from_team, { sub: false })}<span class="muted">→</span>${teamTag(t.to_team, { sub: false })}</span>
+          <span class="pill${t.status === "pending_review" ? " agent" : ""}">${esc(TRADE_STATUS[t.status] || t.status)}</span></div>
+        <div class="lineups" style="margin-top:10px">
+          <div><div class="muted" style="font-size:12px">${esc(team(t.from_team).name)} sends</div>${t.from_team_gives.map((p) => `<div>${esc(p)}</div>`).join("")}</div>
+          <div><div class="muted" style="font-size:12px">${esc(team(t.to_team).name)} sends</div>${t.from_team_receives.map((p) => `<div>${esc(p)}</div>`).join("")}</div></div>
+        ${t.message ? `<div class="msg ink2" style="margin-top:10px;font-size:14px">“${esc(t.message)}”</div>` : ""}
+        ${t.response ? `<div class="msg muted" style="margin-top:6px;font-size:13px">Reply: “${esc(t.response)}”</div>` : ""}
+        <div class="muted" style="font-size:12px;margin-top:8px">Proposed ${esc(fmtWhen(t.created_at))}${t.responded_at ? ` · answered ${esc(fmtWhen(t.responded_at))}` : t.status === "open" ? ` · expires ${esc(fmtWhen(t.expires_at))}` : ""}</div></div>`).join("");
+      body = body || `<div class="card"><span class="muted">No trades yet.</span></div>`;
+    } else {
+      const tx = L.transactions.filter((x) => involves([x.team]));
+      const kind = (k) => ({ add: "Added", drop: "Dropped", trade: "Traded for", ir: "Moved to IR", activate: "Activated", commissioner_undo: "Reversed" }[k] || k);
+      body = tx.length ? `<div class="card scroll"><table><thead><tr><th>When</th><th>Team</th><th>Move</th><th>Player</th><th>Detail</th></tr></thead><tbody>
+        ${tx.map((x) => `<tr><td class="muted" style="white-space:nowrap">${esc(fmtWhen(x.at))}</td><td>${teamTag(x.team, { sub: false })}</td><td>${esc(kind(x.kind))}</td><td>${esc(x.player || "")}</td><td class="muted">${esc(x.detail || "")}</td></tr>`).join("")}
+        </tbody></table></div>` : `<div class="card"><span class="muted">No moves yet.</span></div>`;
+    }
+    return `<h1>Activity</h1>${tabs}${teamFilter}${body}`;
   }
 
   function md(src) {
@@ -275,13 +306,18 @@
   const routes = [
     [/^$/, () => viewMatchups()], [/^w\/(\d+)$/, (m) => viewMatchups(+m[1])], [/^m\/(\d+)\/(\w+)$/, (m) => viewMatchup(+m[1], m[2])],
     [/^standings$/, viewStandings], [/^teams$/, viewTeams], [/^t\/(\w+)$/, (m) => viewTeam(m[1])], [/^draft$/, viewDraft],
-    [/^activity$/, viewActivity], [/^recaps$/, viewRecaps], [/^agents$/, viewAgents],
+    [/^activity(?:\/(\w+))?(?:\?team=(\w+))?$/, (m) => viewActivity(m[1], m[2])], [/^recaps$/, viewRecaps], [/^agents$/, viewAgents],
   ];
   function render() {
     const path = location.hash.replace(/^#\/?/, "");
     const hit = routes.find(([re]) => re.test(path)) || routes[0];
     app.innerHTML = hit[1](path.match(hit[0]) || []);
-    const section = path.split("/")[0];
+    const section = path.split(/[/?]/)[0];
+    const tf = document.getElementById("tf");
+    if (tf) tf.addEventListener("change", () => {
+      const sub = (path.match(/^activity\/(\w+)/) || [])[1] || "board";
+      location.hash = `#/activity/${sub}${tf.value ? "?team=" + tf.value : ""}`;
+    });
     const tabFor = { "": "", w: "", m: "", t: "teams" }[section] ?? section;
     document.querySelectorAll("#tabs a").forEach((a) => {
       if (a.getAttribute("href") === "#/" + tabFor) a.setAttribute("aria-current", "page");

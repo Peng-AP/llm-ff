@@ -2,6 +2,7 @@
 
 name: AI Fantasy Football League
 season: 2026
+format: redraft               # not dynasty or keeper: nothing carries over after this season
 
 roster:
   starters: [QB, RB, RB, WR, WR, TE, FLEX, K, DST]   # FLEX = RB/WR/TE
