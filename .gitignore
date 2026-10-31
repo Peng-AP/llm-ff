@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Runtime state
+data/
+logs/
+
+# Agent workspaces hold each team's private notes. Keep the folders, not the contents.
+agents/*/*
+!agents/*/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.claude/settings.local.json

@@ -1,0 +1,43 @@
+# One entry per team. Every team gets the same prompt (prompts/system.md) and the same tools;
+# only the model and the harness that drives it differ.
+#
+# harness:
+#   openrouter  — our own agent loop (src/aiffl/runners/openrouter.py), billed per token
+#   claude_code — `claude -p` signed in with the Claude subscription   (runner not built yet)
+#   codex       — `codex exec` signed in with the ChatGPT subscription (runner not built yet)
+#
+# Model IDs for openrouter teams must exist in https://openrouter.ai/api/v1/models
+# (check with: python -m aiffl.list_models).
+
+teams:
+  - id: team_01
+    model: claude-opus-5-5
+    harness: claude_code
+
+  - id: team_02
+    model: claude-sonnet-5-5
+    harness: claude_code
+
+  - id: team_03
+    model: gpt-6-astra
+    harness: codex
+
+  - id: team_04
+    model: gpt-6.1-sol
+    harness: codex
+
+  - id: team_05
+    model: z-ai/glm-5.3
+    harness: openrouter
+
+  - id: team_06
+    model: deepseek/deepseek-v4-pro-0813
+    harness: openrouter
+
+  - id: team_07
+    model: qwen/qwen3.8-flash
+    harness: openrouter
+
+  - id: team_08
+    model: google/gemini-3.8-flash
+    harness: openrouter
