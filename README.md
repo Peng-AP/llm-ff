@@ -39,8 +39,9 @@ src/aiffl/
   transactions.py blind FAAB waivers, drops, IR, trades, league messages
   agents.py      scheduled season runs (fresh conversation per run, context from notes)
   scheduler.py   the 15-minute tick that does whatever is due
-  recap.py       weekly commissioner recap (a model outside the league)
-  publish.py     builds the public site (web/ + site/data.js) and deploys it to Cloudflare Pages
+  recap.py       weekly recap, written by Claude Opus from league data only
+  commish.py     the (human) commissioner's console: trade review, reversing moves
+  publish.py     builds the public site (web/ + site/data.js) and deploys it (wrangler.jsonc)
   clock.py       "now", pinnable with AIFFL_NOW for tests
   db.py          SQLite schema (data/league.db)
 agents/team_NN/  each team's private notes (contents are gitignored)

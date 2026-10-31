@@ -70,6 +70,6 @@ automation:
 # deployed only when something changed, at most every 30 minutes while games are on and every
 # 60 minutes otherwise.
 site:
-  deploy: false               # turned on once the first deploy succeeds
+  deploy: true
   min_minutes_between_deploys: 60
   min_minutes_between_deploys_live: 30
