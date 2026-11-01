@@ -113,6 +113,8 @@ try:
 except LeagueError as e:
     print("only recipient can accept ok:", e)
 acc = T.respond_to_trade(conn, t2, tr["trade"]["trade_id"], True, "Deal")
+if acc.get("status") == "pending_review":  # the commissioner reviews trades (see tests/commish_sim.py)
+    acc = T.approve_trade(conn, tr["trade"]["trade_id"])
 print("accepted:", acc["accepted"]["status"])
 assert T.owner(conn, give[0])["team_id"] == t2 and T.owner(conn, recv[0])["team_id"] == t1
 

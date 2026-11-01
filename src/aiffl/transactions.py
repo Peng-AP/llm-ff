@@ -298,7 +298,7 @@ def _check_trade_executable(conn: sqlite3.Connection, t: sqlite3.Row) -> None:
         raise LeagueError(f"{t['from_team']} would end up over the roster limit; they must drop a player first.")
 
 
-def execute_trade(conn: sqlite3.Connection, trade_id: int, note: str | None = None) -> dict:
+def execute_trade(conn: sqlite3.Connection, trade_id: int) -> dict:
     """Move the players. Re-checks everything, since rosters may have changed since acceptance."""
     t = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
     _check_trade_executable(conn, t)
@@ -315,8 +315,9 @@ def execute_trade(conn: sqlite3.Connection, trade_id: int, note: str | None = No
             conn.execute("UPDATE rosters SET team_id = ?, acquired_at = ?, how = 'trade' WHERE player_id = ?",
                          (t["from_team"], ts, pid))
             _log(conn, t["from_team"], "trade", pid, f"from {t['to_team']} (trade {trade_id})")
-        conn.execute("UPDATE trades SET status = 'accepted', responded_at = COALESCE(responded_at, ?), "
-                     "response = COALESCE(?, response) WHERE id = ?", (ts, note, trade_id))
+        # response stays the other team's reply; a commissioner's note goes to both teams as a DM.
+        conn.execute("UPDATE trades SET status = 'accepted', responded_at = COALESCE(responded_at, ?) WHERE id = ?",
+                     (ts, trade_id))
         # Other open offers involving these players can no longer go through.
         moved = set(give + receive)
         for other in conn.execute("SELECT * FROM trades WHERE status IN ('open', 'pending_review') AND id != ?",
@@ -372,14 +373,14 @@ def approve_trade(conn: sqlite3.Connection, trade_id: int, note: str = "approved
         raise LeagueError(f"Trade {trade_id} is not awaiting review.")
     teams = [t["from_team"], t["to_team"]]
     try:
-        result = execute_trade(conn, trade_id, note)
+        result = execute_trade(conn, trade_id)
     except LeagueError as e:
         with conn:
             conn.execute("UPDATE trades SET status = 'failed', response = ? WHERE id = ?",
                          (f"could not execute at approval: {e}", trade_id))
         _tell(conn, teams, f"Trade {trade_id} could not go through when approved: {e}")
         raise
-    _tell(conn, teams, f"Trade {trade_id} was approved and has executed ({note}).")
+    _tell(conn, teams, f"Trade {trade_id} was approved and has executed" + (f" ({note})." if note else "."))
     return result
 
 

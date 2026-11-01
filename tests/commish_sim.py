@@ -34,6 +34,8 @@ print(subprocess.run(cli, capture_output=True, text=True, env=os.environ).stdout
 print(subprocess.run(cli + ["approve", str(t1["trade_id"]), "fair depth swap"], capture_output=True, text=True,
                      env=os.environ).stdout[:200])
 assert T.owner(conn, t1["give_ids"][0])["team_id"] == b, "approved trade must execute"
+assert conn.execute("SELECT response FROM trades WHERE id = ?", (t1["trade_id"],)).fetchone()[0] == "OK", \
+    "approval must keep the other team's reply"
 print(subprocess.run(cli + ["veto", str(t2["trade_id"]), "testing veto"], capture_output=True, text=True,
                      env=os.environ).stdout)
 assert T.owner(conn, t2["give_ids"][0])["team_id"] == a, "vetoed trade must not execute"
