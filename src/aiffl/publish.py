@@ -5,8 +5,9 @@
 
 The site is a static app in web/ plus one generated data file, site/data.js. It shows only what
 is public inside the league (rosters, lineups, scores, projections, transactions, trades,
-league-wide messages, recaps) plus which model runs each team. Agents' notes and direct messages
-are never published, and agents' web tools exclude this domain, so the site can't leak into play.
+league-wide messages, recaps) plus which model runs each team, waiver bids, and direct messages
+between teams. Agents' notes are never published, and agents' web tools exclude this domain, so
+bids and direct messages stay hidden from the other teams.
 """
 
 import hashlib
@@ -134,6 +135,9 @@ def build_data(conn: sqlite3.Connection) -> dict:
         t.pop("give_ids"), t.pop("receive_ids")
     messages = [dict(r) for r in conn.execute("SELECT at, from_team, text FROM messages WHERE to_team IS NULL "
                                               "ORDER BY id DESC LIMIT 300")]
+    # Like blind bids below, team-to-team DMs are public here only: agents' web tools block this site's domain.
+    dms = [dict(r) for r in conn.execute("SELECT at, from_team, to_team, text FROM messages WHERE "
+                                         "from_team LIKE 'team%' AND to_team LIKE 'team%' ORDER BY id DESC LIMIT 300")]
     # Blind bids are public here only: agents' web tools block this site's domain.
     claims = [{"team": r["team_id"], "add": transactions._name(conn, r["add_player"]),
                "drop": transactions._name(conn, r["drop_player"]) if r["drop_player"] else None,
@@ -164,7 +168,7 @@ def build_data(conn: sqlite3.Connection) -> dict:
                    "next_waivers": transactions.next_processing() if drafted else None},
         "teams": teams, "weeks": weeks, "rosters": rosters, "weekly_points": weekly_points,
         "draft": {"order": league.draft_order(conn), "rounds": state["rounds"] if state else 0, "picks": picks},
-        "transactions": tx, "trades": trades, "messages": messages, "recaps": recaps, "claims": claims,
+        "transactions": tx, "trades": trades, "messages": messages, "dms": dms, "recaps": recaps, "claims": claims,
     }
 
 

@@ -221,8 +221,9 @@
   }
 
   // Activity, recaps, agents -------------------------------------------------------------------
-  // Activity: three sub-pages (#/activity/board, /trades, /moves), each with a team filter (?team=team_03).
-  const ACTIVITY = [["board", "Message board"], ["trades", "Trades"], ["waivers", "Waivers"], ["moves", "Roster moves"]];
+  // Activity: sub-pages (#/activity/board, /dms, /trades, /waivers, /moves), each with a team filter (?team=team_03).
+  const ACTIVITY = [["board", "Message board"], ["dms", "Direct messages"], ["trades", "Trades"], ["waivers", "Waivers"],
+                    ["moves", "Roster moves"]];
   const TRADE_STATUS = { pending_review: "Awaiting commissioner", accepted: "Completed", open: "Open", rejected: "Rejected",
                          cancelled: "Withdrawn", expired: "Expired", failed: "Failed", vetoed: "Vetoed" };
   const sender = (from) => from.startsWith("team_") ? teamTag(from, { sub: false })
@@ -231,8 +232,8 @@
   function viewActivity(sub, filter) {
     sub = ACTIVITY.some(([k]) => k === sub) ? sub : "board";
     const involves = (ids) => !filter || ids.includes(filter);
-    const claims = L.claims || [];
-    const counts = { board: L.messages.length, trades: L.trades.length, moves: L.transactions.length,
+    const claims = L.claims || [], dms = L.dms || [];
+    const counts = { board: L.messages.length, dms: dms.length, trades: L.trades.length, moves: L.transactions.length,
                      waivers: claims.filter((c) => c.status === "pending").length };
     const tabs = `<div class="weeks" role="tablist">${ACTIVITY.map(([k, label]) =>
       `<a role="tab" href="#/activity/${k}${filter ? "?team=" + filter : ""}" aria-current="${k === sub}">${label} <span class="muted">${counts[k]}</span></a>`).join("")}</div>`;
@@ -245,6 +246,12 @@
       body = msgs.map((m) => `<div><div class="row spread">${sender(m.from_team)}<span class="muted" style="font-size:12px">${esc(fmtWhen(m.at))}</span></div>
         <div class="msg${m.from_team === "league_recap" ? " md" : ""}" style="margin-top:4px">${m.from_team === "league_recap" ? md(m.text) : esc(m.text)}</div></div>`).join("");
       body = `<div class="card feed">${body || `<span class="muted">No messages yet.</span>`}</div>`;
+    } else if (sub === "dms") {
+      body = dms.filter((m) => involves([m.from_team, m.to_team])).map((m) => `<div>
+        <div class="row spread"><span class="row">${teamTag(m.from_team, { sub: false })}<span class="muted">→</span>${teamTag(m.to_team, { sub: false })}</span>
+          <span class="muted" style="font-size:12px">${esc(fmtWhen(m.at))}</span></div>
+        <div class="msg" style="margin-top:4px">${esc(m.text)}</div></div>`).join("");
+      body = `<div class="card feed">${body || `<span class="muted">No direct messages yet.</span>`}</div>`;
     } else if (sub === "trades") {
       const trades = L.trades.filter((t) => involves([t.from_team, t.to_team]));
       body = trades.map((t) => `<div class="card" style="margin-bottom:12px">
