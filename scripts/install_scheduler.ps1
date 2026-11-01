@@ -11,8 +11,10 @@ if ($Remove) {
 }
 
 $tick = Join-Path $PSScriptRoot "tick.ps1"
-$action = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tick`"" `
+# A headless console host: no window at all. (powershell -WindowStyle Hidden still flashes one,
+# especially with Windows Terminal as the default terminal, which ignores the hidden style.)
+$action = New-ScheduledTaskAction -Execute "conhost.exe" `
+    -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$tick`"" `
     -WorkingDirectory (Split-Path -Parent $PSScriptRoot)
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries `
