@@ -18,6 +18,10 @@ agents.load_league = lambda: cfg  # test with wakes on, without touching league.
 
 conn = db.connect()
 conn.execute("UPDATE agent_runs SET seconds = COALESCE(seconds, 60), started_at = '2026-11-01T01:00:00Z'")
+# Activity already in the copied league counts as seen, so only what this test adds wakes anyone.
+conn.execute("UPDATE messages SET at = '2026-10-31T00:00:00Z'")
+conn.execute("UPDATE trades SET status = 'cancelled' WHERE status = 'open'")
+conn.execute("UPDATE waiver_claims SET processed_at = '2026-10-31T00:00:00Z' WHERE processed_at IS NOT NULL")
 conn.commit()
 
 T.send_message(conn, "team_01", "team_02", "Interested in your WR depth?")          # direct message
@@ -45,6 +49,13 @@ T.send_message(conn, "team_01", "team_07", "ping")  # new item after those runs
 wakes = agents.due_wakes(conn)
 print("after guards:", {k: len(v) for k, v in wakes.items()})
 assert "team_02" not in wakes, "cooldown"
+# A tick a few seconds short of the cooldown still wakes (runs start just after their tick).
+os.environ["AIFFL_NOW"] = "2026-11-01T03:29:55Z"
+conn.execute("UPDATE agent_runs SET started_at = '2026-11-01T02:30:05Z' WHERE team_id = 'team_02' AND why = 'x'")
+cfg["automation"]["event_wakes"]["cooldown_minutes"] = 60
+assert "team_02" in agents.due_wakes(conn), "cooldown slack"
+conn.execute("UPDATE agent_runs SET started_at = '2026-11-01T02:30:00Z' WHERE team_id = 'team_02' AND why = 'x'")
+os.environ["AIFFL_NOW"] = "2026-11-01T03:00:00Z"
 assert "team_06" not in wakes, "in progress"
 assert "team_07" not in wakes, "daily cap"
 assert agents.pending_items(conn, "team_07"), "team_07 must still have an item, so only the cap blocks it"

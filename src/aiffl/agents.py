@@ -19,6 +19,9 @@ from aiffl.runners.sessions import make_session
 
 SEASON_BUDGET = {"web_search": 25, "fetch_page": 15}
 RUN_STALE_MINUTES = 60  # a run row with no end after this long is treated as dead, not in progress
+# Runs start a few seconds after their tick, so the tick a whole cooldown later would land just short of
+# it and the wake would slip a full tick. This much early still counts.
+COOLDOWN_SLACK = timedelta(minutes=2)
 
 
 def run_message(conn, why: str, header: str = "SCHEDULED RUN") -> str:
@@ -152,7 +155,7 @@ def due_wakes(conn) -> dict[str, list[str]]:
         if not items or running(conn, t.id):
             continue
         last = last_run_start(conn, t.id)
-        if last and now - clock.parse(last) < timedelta(minutes=cfg.get("cooldown_minutes", 60)):
+        if last and now - clock.parse(last) < timedelta(minutes=cfg.get("cooldown_minutes", 60)) - COOLDOWN_SLACK:
             continue
         woken_today = conn.execute("SELECT COUNT(*) FROM agent_runs WHERE team_id = ? AND why LIKE 'Woken for:%' "
                                    "AND started_at >= ?", (t.id, day_start)).fetchone()[0]
