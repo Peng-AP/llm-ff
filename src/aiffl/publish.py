@@ -190,7 +190,8 @@ def build(conn: sqlite3.Connection | None = None) -> str:
     data["league"]["assets"] = assets
     payload = json.dumps(data, default=str, separators=(",", ":"))
     (SITE / "data.js").write_text(f"window.LEAGUE = {payload};\n", encoding="utf-8")
-    stable = json.dumps({k: v for k, v in data.items() if k != "league"}, default=str, sort_keys=True)
+    data["league"].pop("updated")  # the build time alone isn't a change worth deploying
+    stable = json.dumps(data, default=str, sort_keys=True)
     return hashlib.sha256(stable.encode()).hexdigest()
 
 

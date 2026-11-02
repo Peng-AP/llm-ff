@@ -2,6 +2,7 @@
 
     python -m aiffl.scheduler tick
     python -m aiffl.scheduler status
+    python -m aiffl.scheduler watch     # long-running: deploys the public site as soon as anything changes
 
 Each tick does whatever is due (times in league.yaml `automation`, US Eastern) and records it in
 jobs_done, so a missed or repeated tick never runs a job twice. Agent runs and waivers that were
@@ -12,6 +13,7 @@ import os
 import sys
 import traceback
 from datetime import timedelta
+from pathlib import Path
 
 from aiffl import clock, db, league, season, transactions
 from aiffl.config import LOGS_DIR, ROOT, load_league
@@ -44,9 +46,9 @@ def mark(conn, key: str, detail: str = "") -> None:
         conn.execute("INSERT OR REPLACE INTO jobs_done VALUES (?, ?, ?)", (key, clock.now_iso(), detail[:1000]))
 
 
-def acquire_lock():
-    """Hold an OS-level lock for the life of this process so ticks never overlap."""
-    path = ROOT / "data" / "scheduler.lock"
+def acquire_lock(name: str = "scheduler"):
+    """Hold an OS-level lock for the life of this process so ticks (or site watchers) never overlap."""
+    path = ROOT / "data" / f"{name}.lock"
     path.parent.mkdir(exist_ok=True)
     f = open(path, "a+")
     try:
@@ -168,32 +170,74 @@ def tick() -> None:
             for note in season.ensure_lineups(conn, season.current_week(conn)):
                 log(f"lineup safety net: {note}")
 
-    # 6. Public site ---------------------------------------------------------------------
-    publish_site(conn, cfg)
+    # 6. Public site: the site watcher deploys every change as it happens; this is the fallback
+    # for when it isn't running.
+    watcher = acquire_lock("site-watcher")
+    if watcher is not None:
+        publish_site(conn, cfg)
+        watcher.close()
     conn.close()
 
 
-def publish_site(conn, cfg: dict) -> None:
+def publish_site(conn, cfg: dict) -> bool:
+    """Rebuild site/ and deploy it if what it shows changed. False if a deploy failed."""
     from aiffl import publish
     digest = publish.build(conn)
-    site = cfg.get("site", {})
-    if not site.get("deploy"):
-        return
-    last = conn.execute("SELECT done_at, detail FROM jobs_done WHERE key = 'site:last-deploy'").fetchone()
+    if not cfg.get("site", {}).get("deploy"):
+        return True
+    last = conn.execute("SELECT detail FROM jobs_done WHERE key = 'site:last-deploy'").fetchone()
     if last and last["detail"] == digest:
-        return  # nothing changed
-    week = season.current_week(conn)
-    live = conn.execute("SELECT 1 FROM nfl_games WHERE season = ? AND week = ? AND state = 'in' LIMIT 1",
-                        (int(cfg["season"]), week)).fetchone()
-    gap = site["min_minutes_between_deploys_live" if live else "min_minutes_between_deploys"]
-    if last and clock.now() - clock.parse(last["done_at"]) < timedelta(minutes=gap):
-        return
+        return True  # nothing changed
     try:
         publish.deploy()
-        mark(conn, "site:last-deploy", digest)
-        log("site deployed")
     except Exception as e:  # a failed deploy must never break the league
         log(f"site deploy failed: {e}")
+        return False
+    mark(conn, "site:last-deploy", digest)
+    log("site deployed")
+    return True
+
+
+WATCH_POLL_SECONDS = 3
+WATCH_FULL_CHECK_SECONDS = 60  # also rebuild this often: some of the site changes with the clock alone
+
+
+def watch() -> None:
+    """Keep the public site current: deploy within seconds of any change to the league.
+
+    Runs as its own long-lived process (scripts/watch_site.ps1, registered by install_scheduler.ps1),
+    so the site updates during agent runs too, while the tick is busy running them. It exits when
+    the code changes; the scheduled task starts it again with the new code.
+    """
+    import time
+    lock = acquire_lock("site-watcher")
+    if lock is None:
+        print("a site watcher is already running")
+        return
+    src = Path(__file__).parent
+    code = lambda: max(f.stat().st_mtime_ns for f in src.rglob("*.py"))  # noqa: E731
+    web = lambda: max(f.stat().st_mtime_ns for f in (ROOT / "web").iterdir())  # noqa: E731
+    started_code = code()
+    conn = db.connect()
+    seen, last_build = None, 0.0
+    log("site watcher started")
+    while True:
+        try:
+            if code() != started_code:
+                log("site watcher: code changed; exiting so it restarts with the new code")
+                return
+            # data_version changes whenever another connection commits to the database.
+            state = (conn.execute("PRAGMA data_version").fetchone()[0], web())
+            if state != seen or time.time() - last_build > WATCH_FULL_CHECK_SECONDS:
+                last_build = time.time()
+                if publish_site(conn, load_league()):
+                    seen = state
+                else:
+                    time.sleep(60)  # deploy failed: back off, then retry
+        except Exception:
+            log("site watcher error:\n" + traceback.format_exc())
+            time.sleep(60)
+        time.sleep(WATCH_POLL_SECONDS)
 
 
 def status() -> None:
@@ -219,6 +263,8 @@ def main() -> None:
             raise
     elif cmd == "status":
         status()
+    elif cmd == "watch":
+        watch()
     else:
         print(__doc__)
 

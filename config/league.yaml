@@ -75,9 +75,7 @@ automation:
     cooldown_minutes: 60      # since the team's last run started
     max_per_day: 6            # per team, US Eastern day
 
-# Public site (python -m aiffl.publish; Worker name and domain in wrangler.jsonc). Rebuilt every tick
-# and deployed whenever something changed (only the changed data file is uploaded).
+# Public site (python -m aiffl.publish; Worker name and domain in wrangler.jsonc). The site watcher
+# (python -m aiffl.scheduler watch) deploys within seconds of any change; only changed files upload.
 site:
   deploy: true
-  min_minutes_between_deploys: 10
-  min_minutes_between_deploys_live: 10

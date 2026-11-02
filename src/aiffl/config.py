@@ -4,6 +4,7 @@ Runtime locations can be overridden with environment variables so a dry run neve
 the real league: AIFFL_DB, AIFFL_AGENTS_DIR, AIFFL_LOGS_DIR, AIFFL_TEAMS.
 """
 
+import copy
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,8 +53,17 @@ def team_by_id(team_id: str) -> Team:
     raise KeyError(f"Unknown team {team_id!r}")
 
 
+_league_cache: tuple[int, dict] | None = None
+
+
 def load_league() -> dict:
-    return yaml.safe_load((CONFIG_DIR / "league.yaml").read_text(encoding="utf-8"))
+    """league.yaml, parsed once per edit (it's read thousands of times per site build). Callers get a copy."""
+    global _league_cache
+    path = CONFIG_DIR / "league.yaml"
+    mtime = path.stat().st_mtime_ns
+    if not _league_cache or _league_cache[0] != mtime:
+        _league_cache = (mtime, yaml.safe_load(path.read_text(encoding="utf-8")))
+    return copy.deepcopy(_league_cache[1])
 
 
 def system_prompt(team: Team, num_teams: int, run_context: str) -> str:
