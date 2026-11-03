@@ -137,6 +137,12 @@ class OpenRouterSession(Session):
             result.turns += 1
             if resp.usage is not None:
                 result.cost_usd += float(getattr(resp.usage, "cost", 0) or 0)
+                u = resp.usage.model_dump()
+                self._log("usage", {"provider": (resp.model_extra or {}).get("provider"),
+                                    "prompt": u.get("prompt_tokens"), "completion": u.get("completion_tokens"),
+                                    "cached": (u.get("prompt_tokens_details") or {}).get("cached_tokens"),
+                                    "reasoning": (u.get("completion_tokens_details") or {}).get("reasoning_tokens"),
+                                    "cost": u.get("cost")})
             msg = resp.choices[0].message
             self.messages.append(msg.model_dump(exclude_none=True))
             self._log("assistant", self.messages[-1])

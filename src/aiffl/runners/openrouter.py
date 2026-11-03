@@ -19,9 +19,14 @@ from aiffl.config import LOGS_DIR
 
 ToolHandler = Callable[[str, dict], object]
 
-# Applied to every OpenRouter team alike. Only route to hosts that support tool calling, and
-# among those prefer the fastest: same model and weights, just less waiting.
-PROVIDER_ROUTING = {"require_parameters": True, "sort": "throughput"}
+# Applied to every OpenRouter team alike. Only route to hosts that support tool calling and serve
+# the model at 8-bit precision or better (4-bit copies are measurably weaker; "unknown" covers the
+# first-party hosts, which don't publish it). Among those, the cheapest first, with hosts slower
+# than 20 tokens/s moved to the back. Sorting by speed instead picked premium "fast" tiers that
+# cost up to ~20x more per token for the same model.
+PROVIDER_ROUTING = {"require_parameters": True,
+                    "quantizations": ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"],
+                    "sort": "price", "preferred_min_throughput": {"p50": 20}}
 # Called when the model tries to finish. Returns a reminder to send back (the run continues),
 # or None to let it finish. Each run gets at most one reminder.
 FinishCheck = Callable[[], str | None]
