@@ -27,6 +27,19 @@ ToolHandler = Callable[[str, dict], object]
 PROVIDER_ROUTING = {"require_parameters": True,
                     "quantizations": ["int8", "fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"],
                     "sort": "price", "preferred_min_throughput": {"p50": 20}}
+# Every team thinks at the same level, set explicitly: left to defaults, DeepSeek didn't reason at
+# all, GLM ran at max, and the Codex teams inherited "low" from the user's own Codex config.
+# Claude Code gets --effort and Codex model_reasoning_effort with the same value (sessions.py).
+REASONING_EFFORT = "high"
+# Models that take only a thinking budget, not effort levels, get this many tokens per step.
+REASONING_BUDGET = 8000
+BUDGET_ONLY_PREFIXES = ("qwen/",)
+
+
+def reasoning_params(model: str) -> dict:
+    if model.startswith(BUDGET_ONLY_PREFIXES):
+        return {"max_tokens": REASONING_BUDGET}
+    return {"effort": REASONING_EFFORT}
 # Called when the model tries to finish. Returns a reminder to send back (the run continues),
 # or None to let it finish. Each run gets at most one reminder.
 FinishCheck = Callable[[], str | None]
@@ -83,7 +96,7 @@ def run_agent(
             model=model,
             messages=messages,
             tools=tools,
-            extra_body={"provider": PROVIDER_ROUTING, "usage": {"include": True}},
+            extra_body={"provider": PROVIDER_ROUTING, "reasoning": reasoning_params(model), "usage": {"include": True}},
         )
         result.turns += 1
         _add_usage(result, resp.usage)

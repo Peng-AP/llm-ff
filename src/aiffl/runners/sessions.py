@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aiffl.config import LOGS_DIR, Team, runtime_env
-from aiffl.runners.openrouter import PROVIDER_ROUTING, make_client
+from aiffl.runners.openrouter import PROVIDER_ROUTING, REASONING_EFFORT, make_client, reasoning_params
 
 PYTHON = sys.executable
 DoneCheck = Callable[[], str | None]  # returns a reminder if the turn's required action is missing
@@ -130,7 +130,8 @@ class OpenRouterSession(Session):
             try:
                 resp = await asyncio.to_thread(
                     self.client.chat.completions.create, model=self.team.model, messages=self.messages,
-                    tools=tools, extra_body={"provider": PROVIDER_ROUTING, "usage": {"include": True}})
+                    tools=tools, extra_body={"provider": PROVIDER_ROUTING, "reasoning": reasoning_params(self.team.model),
+                                             "usage": {"include": True}})
             except Exception as e:
                 result.error = f"{type(e).__name__}: {e}"
                 break
@@ -222,7 +223,7 @@ class ClaudeCodeSession(Session):
         first = self.session_id is None
         if first:
             self.session_id = str(uuid.uuid4())
-        cmd = [self.exe, "-p", "--model", self.team.model, "--output-format", "json",
+        cmd = [self.exe, "-p", "--model", self.team.model, "--effort", REASONING_EFFORT, "--output-format", "json",
                "--system-prompt-file", str(self.prompt_file),
                "--tools", "",                              # no built-in tools: no shell, files, or native web
                "--mcp-config", str(self.mcp_file), "--strict-mcp-config",
@@ -271,6 +272,7 @@ class CodexSession(Session):
         settings = {
             "developer_instructions": json.dumps(instructions),
             "approval_policy": '"never"',
+            "model_reasoning_effort": json.dumps(REASONING_EFFORT),  # else the user's own config.toml applies
             "web_search": '"disabled"',
             "mcp_servers.league.command": json.dumps(PYTHON),
             "mcp_servers.league.args": json.dumps(["-m", "aiffl.mcp_server", "--team", self.team.id]),
