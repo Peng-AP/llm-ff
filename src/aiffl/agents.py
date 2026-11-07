@@ -17,7 +17,8 @@ from aiffl import clock, db, season
 from aiffl.config import Team, load_league, load_teams, system_prompt
 from aiffl.runners.sessions import make_session
 
-SEASON_BUDGET = {"web_search": 25, "fetch_page": 15}
+# Searches cost money (Exa); 12 covers a typical run for all but the heaviest researchers.
+SEASON_BUDGET = {"web_search": 12, "fetch_page": 15}
 RUN_STALE_MINUTES = 60  # a run row with no end after this long is treated as dead, not in progress
 # Runs start a few seconds after their tick, so the tick a whole cooldown later would land just short of
 # it and the wake would slip a full tick. This much early still counts.
