@@ -35,7 +35,9 @@ def search(query: str, num_results: int = 6, published_after: str | None = None,
     body = {
         "query": query,
         "numResults": max(1, min(num_results, 10)),
-        "type": "auto",
+        # $4 per 1,000 searches against $7 for "auto"; on league queries (inactives, practice
+        # reports, depth charts) it returned the same team sites and beat reporters, as fresh.
+        "type": "lite",
         "contents": {"text": {"maxCharacters": 1500}},
     }
     if published_after:
