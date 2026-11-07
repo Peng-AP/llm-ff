@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aiffl.config import LOGS_DIR, Team, runtime_env
-from aiffl.runners.openrouter import PROVIDER_ROUTING, REASONING_EFFORT, make_client, reasoning_params
+from aiffl.runners.openrouter import REASONING_EFFORT, chat, make_client
 
 PYTHON = sys.executable
 DoneCheck = Callable[[], str | None]  # returns a reminder if the turn's required action is missing
@@ -128,10 +128,7 @@ class OpenRouterSession(Session):
                 self.messages.append({"role": "user", "content": note})
                 self._log("user", note)
             try:
-                resp = await asyncio.to_thread(
-                    self.client.chat.completions.create, model=self.team.model, messages=self.messages,
-                    tools=tools, extra_body={"provider": PROVIDER_ROUTING, "reasoning": reasoning_params(self.team.model),
-                                             "usage": {"include": True}})
+                resp = await asyncio.to_thread(chat, self.client, self.team.model, self.messages, tools)
             except Exception as e:
                 result.error = f"{type(e).__name__}: {e}"
                 break

@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import openai
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -40,6 +41,18 @@ def reasoning_params(model: str) -> dict:
     if model.startswith(BUDGET_ONLY_PREFIXES):
         return {"max_tokens": REASONING_BUDGET}
     return {"effort": REASONING_EFFORT}
+
+
+def chat(client: OpenAI, model: str, messages: list[dict], tools: list[dict]):
+    """One completion. Asks for the flex tier: the same model at half price where the host offers it
+    (Google, Alibaba, StreamLake); hosts without one charge their normal price. Flex capacity is
+    best-effort, so if it stays busy the step is retried once on the standard tier."""
+    body = {"provider": PROVIDER_ROUTING, "reasoning": reasoning_params(model), "usage": {"include": True}}
+    try:
+        return client.with_options(max_retries=2).chat.completions.create(
+            model=model, messages=messages, tools=tools, extra_body={**body, "service_tier": "flex"})
+    except (openai.RateLimitError, openai.InternalServerError, openai.APITimeoutError, openai.APIConnectionError):
+        return client.chat.completions.create(model=model, messages=messages, tools=tools, extra_body=body)
 # Called when the model tries to finish. Returns a reminder to send back (the run continues),
 # or None to let it finish. Each run gets at most one reminder.
 FinishCheck = Callable[[], str | None]
@@ -92,12 +105,7 @@ def run_agent(
     reminded = False
 
     for _ in range(max_turns):
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tools,
-            extra_body={"provider": PROVIDER_ROUTING, "reasoning": reasoning_params(model), "usage": {"include": True}},
-        )
+        resp = chat(client, model, messages, tools)
         result.turns += 1
         _add_usage(result, resp.usage)
 
