@@ -112,6 +112,14 @@ def last_run_start(conn, team_id: str) -> str:
                         (team_id,)).fetchone()[0]
 
 
+def last_seen(conn, team_id: str) -> str:
+    """Start of the team's last run that got to work; what arrived before it counts as seen. A run that
+    failed outright (an API error, a crash) doesn't count, so what it missed still wakes the team.
+    A run that timed out does: it worked, and counting it would re-wake the team after every timeout."""
+    return conn.execute("SELECT COALESCE(MAX(started_at), '') FROM agent_runs WHERE team_id = ? "
+                        "AND (ok = 1 OR error LIKE 'timeout%')", (team_id,)).fetchone()[0]
+
+
 def running(conn, team_id: str) -> bool:
     stale = (clock.now() - timedelta(minutes=RUN_STALE_MINUTES)).strftime(clock.ISO)
     return bool(conn.execute("SELECT 1 FROM agent_runs WHERE team_id = ? AND seconds IS NULL AND started_at > ?",
@@ -119,8 +127,8 @@ def running(conn, team_id: str) -> bool:
 
 
 def pending_items(conn, team_id: str) -> list[str]:
-    """What is addressed to this team that arrived after its last run started."""
-    since = last_run_start(conn, team_id)
+    """What is addressed to this team that arrived after its last working run started."""
+    since = last_seen(conn, team_id)
     items = [f"trade offer #{t['id']} from {t['from_team']} (expires {t['expires_at']})" for t in conn.execute(
         "SELECT * FROM trades WHERE to_team = ? AND status = 'open' AND created_at > ?", (team_id, since))]
     for m in conn.execute("SELECT * FROM messages WHERE to_team = ? AND at > ?", (team_id, since)):

@@ -17,7 +17,8 @@ cfg["automation"]["event_wakes"]["enabled"] = True
 agents.load_league = lambda: cfg  # test with wakes on, without touching league.yaml
 
 conn = db.connect()
-conn.execute("UPDATE agent_runs SET seconds = COALESCE(seconds, 60), started_at = '2026-11-01T01:00:00Z'")
+conn.execute("UPDATE agent_runs SET seconds = COALESCE(seconds, 60), ok = 1, error = NULL, "
+             "started_at = '2026-11-01T01:00:00Z'")
 # Activity already in the copied league counts as seen, so only what this test adds wakes anyone.
 conn.execute("UPDATE messages SET at = '2026-10-31T00:00:00Z'")
 conn.execute("UPDATE trades SET status = 'cancelled' WHERE status = 'open'")
@@ -78,4 +79,15 @@ assert any(i.startswith("waiver results: won") for i in items4)
 assert any("outbid on" in i for i in items5)
 assert not any(i.startswith("waiver results") for i in agents.pending_items(conn, "team_08"))
 assert {"team_04", "team_05"} <= set(agents.due_wakes(conn))
+
+# A run that failed outright hasn't seen its items; one that timed out has.
+os.environ["AIFFL_NOW"] = "2026-11-01T16:00:00Z"
+conn.execute("INSERT INTO agent_runs (team_id, why, started_at, seconds, ok, error) VALUES "
+             "('team_04', 'Woken for: x', '2026-11-01T14:05:00Z', 5, 0, 'RateLimitError: 429')")
+conn.execute("INSERT INTO agent_runs (team_id, why, started_at, seconds, ok, error) VALUES "
+             "('team_05', 'Woken for: x', '2026-11-01T14:05:00Z', 720, 0, 'timeout (wrap-up turn ok)')")
+conn.commit()
+assert agents.pending_items(conn, "team_04"), "failed run: items still pending"
+assert "team_04" in agents.due_wakes(conn), "failed run: woken again after the cooldown"
+assert not agents.pending_items(conn, "team_05"), "timed-out run: items seen"
 print("WAKE CHECKS PASSED")
