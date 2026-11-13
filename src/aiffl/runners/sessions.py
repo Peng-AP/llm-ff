@@ -244,7 +244,9 @@ class ClaudeCodeSession(Session):
             result.cost_usd = float(data.get("total_cost_usd") or 0)  # API-equivalent; subscription isn't billed
             if code is not None:
                 result.ok = not data.get("is_error")
-                result.error = None if result.ok else (data.get("subtype") or "error")
+                # An API error (e.g. the plan's usage limit) still reports subtype "success"; its
+                # message is in result.
+                result.error = None if result.ok else (data.get("result") or data.get("subtype") or "error")[:500]
         elif code is not None:
             result.error = f"exit {code}: {(err or out)[-500:]}"
         return result
